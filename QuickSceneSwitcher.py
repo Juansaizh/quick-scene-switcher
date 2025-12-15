@@ -20,6 +20,7 @@
 
 import sys
 import os
+import uuid
 from PySide2 import QtWidgets, QtGui, QtCore
 
 try:
@@ -59,7 +60,7 @@ def get_icon(max_name, fallback_standard_icon_attr=None, style=None):
 
     if style and fallback_standard_icon_attr is not None:
         return style.standardIcon(fallback_standard_icon_attr)
-    
+
     return QtGui.QIcon()
 
 class SceneSwitcherUI(QtWidgets.QDockWidget):
@@ -78,7 +79,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         self.main_widget = QtWidgets.QWidget()
         self.setWidget(self.main_widget)
-        
+
         self.init_ui()
         self.apply_styles()
 
@@ -116,7 +117,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         path_input_layout.addWidget(self.path_le)
         path_input_layout.addWidget(self.browse_btn)
-        
+
         path_container_layout.addLayout(path_input_layout)
         main_layout.addLayout(path_container_layout)
 
@@ -134,7 +135,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         icon_save = get_icon("Common/Save", None, self.style())
         icon_copy = get_icon("Common/Copy", None, self.style())
         icon_paste = get_icon("Common/Paste", None, self.style())
-        
+
         self.save_btn = QtWidgets.QPushButton(" Save")
         self.save_btn.setIcon(icon_save)
         self.save_btn.setIconSize(QtCore.QSize(16,16))
@@ -157,18 +158,18 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         action_layout.addWidget(self.save_btn)
         action_layout.addWidget(self.copy_btn)
         action_layout.addWidget(self.paste_btn)
-        
+
         main_layout.addLayout(action_layout)
 
         self.active_scene_item = None
-        
+
         self.dirty_timer = QtCore.QTimer(self)
         self.dirty_timer = QtCore.QTimer(self)
         self.dirty_timer.timeout.connect(self.check_modifications)
-        self.dirty_timer.start(500) 
-        
+        self.dirty_timer.start(500)
+
         self.is_ui_dirty = False
-        
+
         self.file_timestamps = {}
 
         if not self.dirty_timer.isActive():
@@ -194,18 +195,18 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         try:
             current_mtime = os.path.getmtime(full_path)
             last_mtime = self.file_timestamps[full_path]
-            
+
             if current_mtime > last_mtime:
                 self.dirty_timer.stop()
-                
+
                 msg_box = QtWidgets.QMessageBox(self)
                 msg_box.setWindowTitle("The scene has been modified externally")
                 msg_box.setText(f"The following scene has been changed:\n\n'{os.path.basename(full_path)}'\n\n"
                                 "Do you want to reload the scene?")
-                
+
                 btn_reload = msg_box.addButton("Reload", QtWidgets.QMessageBox.AcceptRole)
                 btn_ignore = msg_box.addButton("Ignore", QtWidgets.QMessageBox.RejectRole)
-                
+
                 btn_reload.setStyleSheet("""
                     background-color: #1e9bfd;
                     color: white;
@@ -216,7 +217,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 btn_ignore.setStyleSheet("padding: 5px 15px;")
 
                 msg_box.exec_()
-                
+
                 if msg_box.clickedButton() == btn_reload:
                     self.reload_active_scene()
                 else:
@@ -240,15 +241,15 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         full_path = self.active_scene_item.data(QtCore.Qt.UserRole)
         display_name = self.active_scene_item.data(QtCore.Qt.UserRole + 1)
-        
+
         index = self.scene_list.row(self.active_scene_item)
-        
+
         if MAX_AVAILABLE:
             rt.disableRefMsgs()
-            
+
             try:
                 root_layer = rt.LayerManager.getLayerFromName(display_name)
-                
+
                 if root_layer:
                     all_layers_cache = []
                     for i in range(rt.LayerManager.count):
@@ -261,40 +262,40 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                             if p and p.name == parent_name:
                                 children.append(lyr)
                         return children
-                    
+
                     def collect_layers_recursive(parent_lyr):
                         desc = [parent_lyr]
                         subdir = get_children(parent_lyr.name)
                         for child in subdir:
                             desc.extend(collect_layers_recursive(child))
                         return desc
-                    
+
                     layers_to_clean = collect_layers_recursive(root_layer)
                     valid_names = set(l.name for l in layers_to_clean)
-                    
+
                     objs_to_delete = []
                     for obj in rt.objects:
                         if obj.layer.name in valid_names:
                             objs_to_delete.append(obj)
-                    
+
                     if objs_to_delete:
                         rt.delete(objs_to_delete)
-                    
+
                     for lyr in reversed(layers_to_clean):
                         try:
                              rt.LayerManager.deleteLayerByName(lyr.name)
                         except:
-                             pass 
-                
+                             pass
+
                 self.import_single_scene(full_path, index, is_reload=True)
-                
+
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Reload Error", str(e))
-                
+
             finally:
                 rt.enableRefMsgs()
                 rt.redrawViews()
-        
+
         else:
              try:
                 self.file_timestamps[full_path] = os.path.getmtime(full_path)
@@ -405,7 +406,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         }
         """
         self.setStyleSheet(qss)
-        
+
         action_btn_style = """
         QPushButton {
             background-color: #646464;
@@ -424,13 +425,13 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
     def browse_folder(self):
         """Abre el explorador, selecciona archivos .max y comienza el Merge Process."""
         start_dir = self.path_le.text() if self.path_le.text() else os.path.expanduser("~")
-        
+
         files, _ = QtWidgets.QFileDialog.getOpenFileNames(self, "Select Scene Files", start_dir, "Max Scenes (*.max)")
-        
+
         if files:
             folder_path = os.path.dirname(files[0])
             self.path_le.setText(folder_path)
-            
+
             self.merge_all_scenes(folder_path, file_list=files)
 
 
@@ -443,7 +444,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         4. Identify Collisions -> Move objects to new 'Name (Scene)' layer -> Parent to Root.
         """
         self.dirty_timer.stop()
-        
+
         self.folder_name_label.setText(os.path.basename(folder_path))
 
         max_files = []
@@ -455,7 +456,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                     if f.lower().endswith(".max"):
                         max_files.append(os.path.join(folder_path, f))
                 max_files.sort()
-                
+
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Could not scan files:\n{e}")
             self.dirty_timer.start(500)
@@ -484,6 +485,36 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 
+    def generate_unique_suffix(self):
+        return f".Duplicate.{uuid.uuid4().hex[:8]}"
+
+    def clean_up_material_names(self):
+        """
+        Removes the .Duplicate.HASH suffix from all materials in the scene.
+        """
+        if not MAX_AVAILABLE:
+            return
+
+        duplicates_cleaned = 0
+        # Iterate over all scene materials
+        # rt.sceneMaterials includes all materials used in the scene
+        for mat in rt.sceneMaterials:
+            mat_name = mat.name
+            if ".Duplicate." in mat_name:
+                # Find the index of the suffix
+                split_name = mat_name.split(".Duplicate.")
+                original_name = split_name[0]
+                
+                # Rename back to original
+                # Since Max allows duplicate names, this is safe and desired
+                try:
+                    mat.name = original_name
+                    duplicates_cleaned += 1
+                except:
+                    pass
+        
+        print(f"Cleaned up {duplicates_cleaned} duplicate material names.")
+
     def import_single_scene(self, full_path, index=0, is_reload=False):
         """
         Imports a SINGLE scene file into the hierarchy.
@@ -492,34 +523,59 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         full_path = str(full_path).replace("\\", "/")
         file_name = os.path.basename(full_path)
         display_name = os.path.splitext(file_name)[0]
-        
+
         try:
             self.file_timestamps[full_path] = os.path.getmtime(full_path)
         except:
             pass
-        
+
         if MAX_AVAILABLE:
             scene_root_layer = rt.LayerManager.getLayerFromName(display_name)
             if not scene_root_layer:
                 scene_root_layer = rt.LayerManager.newLayerFromName(display_name)
-            
+
             scene_root_layer.current = True
-            
+
             existing_layer_names = set()
             for i in range(rt.LayerManager.count):
                 existing_layer_names.add(rt.LayerManager.getLayer(i).name)
-            
+
             rt.mergeMaxFile(full_path, rt.name("mergeDups"), rt.name("select"), quiet=True)
             
-            suffix = f" ({display_name})"
+            # --- UNIQUE MATERIAL RENAMING START ---
+            # To prevent name collisions during subsequent merges, we give unique names
+            # to the materials of the newly merged objects.
+            unique_suffix = self.generate_unique_suffix()
             
+            # Helper to recursively get materials from an object
+            def get_materials_from_nodes(nodes):
+                mats = set()
+                for obj in nodes:
+                    if obj.material:
+                        mats.add(obj.material)
+                return mats
+
+            merged_objects = list(rt.selection)
+            merged_materials = get_materials_from_nodes(merged_objects)
+            
+            for mat in merged_materials:
+                # Append unique suffix
+                # e.g. "Wood" -> "Wood.Duplicate.a1b2c3d4"
+                try:
+                    mat.name = f"{mat.name}{unique_suffix}"
+                except:
+                    pass
+            # --- UNIQUE MATERIAL RENAMING END ---
+
+            suffix = f" ({display_name})"
+
             objs_on_layer_0 = [x for x in rt.selection if x.layer.name == "0"]
             if objs_on_layer_0:
                 layer0_name = f"0{suffix}"
                 layer0_scene = rt.LayerManager.getLayerFromName(layer0_name)
                 if not layer0_scene:
                     layer0_scene = rt.LayerManager.newLayerFromName(layer0_name)
-                
+
                 layer0_scene.setParent(scene_root_layer)
                 for obj in objs_on_layer_0:
                     layer0_scene.addNode(obj)
@@ -529,36 +585,36 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 all_layers.append(rt.LayerManager.getLayer(i))
 
             new_layers_set = set()
-            created_layer0_name = f"0{suffix}" 
-            
+            created_layer0_name = f"0{suffix}"
+
             for layer in all_layers:
                 if layer.name == "0" or layer.name == display_name:
                         continue
                 if layer.name == created_layer0_name:
                         continue
-                        
+
                 if layer.name not in existing_layer_names:
                         new_layers_set.add(layer)
 
             for layer in list(new_layers_set):
                 old_name = layer.name
                 new_name = f"{old_name}{suffix}"
-                
+
                 layer.setName(new_name)
-                
+
                 parent = layer.getParent()
-                
+
                 is_nested = False
                 if parent:
                     if parent in new_layers_set:
                         is_nested = True
-                
+
                 if not is_nested:
                     layer.setParent(scene_root_layer)
-            
+
             for layer_name in existing_layer_names:
                 if layer_name == "0": continue
-                
+
                 objs_in_layer = [x for x in rt.selection if x.layer.name == layer_name]
                 if objs_in_layer:
                     unique_name = f"{layer_name}{suffix}"
@@ -566,14 +622,14 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                     if not unique_layer:
                             unique_layer = rt.LayerManager.newLayerFromName(unique_name)
                             unique_layer.setParent(scene_root_layer)
-                    
+
                     for obj in objs_in_layer:
                         unique_layer.addNode(obj)
 
             if not is_reload:
                 should_be_visible = (index == 0)
                 scene_root_layer.on = should_be_visible
-            
+
         icon_item = None
         if MAX_AVAILABLE:
             try:
@@ -583,14 +639,14 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                         icon_item = QtGui.QIcon(custom_icon_path)
             except:
                 pass
-        
+
         if not icon_item or icon_item.isNull():
                 icon_item = get_icon("Citras/3dsMax", QtWidgets.QStyle.SP_FileIcon, self.style())
-                
+
         if not is_reload:
             item = QtWidgets.QListWidgetItem(icon_item, display_name)
             item.setData(QtCore.Qt.UserRole, full_path)
-            item.setData(QtCore.Qt.UserRole + 1, display_name) 
+            item.setData(QtCore.Qt.UserRole + 1, display_name)
             self.scene_list.addItem(item)
 
             if index == 0:
@@ -621,11 +677,12 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.active_scene_item = item
 
         if MAX_AVAILABLE:
+            rt.clearSelection()
             count = self.scene_list.count()
             for i in range(count):
                 list_item = self.scene_list.item(i)
                 layer_name = list_item.data(QtCore.Qt.UserRole + 1)
-                
+
                 layer = rt.LayerManager.getLayerFromName(layer_name)
                 if layer:
                     if layer_name == tgt_layer_name:
@@ -633,23 +690,23 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                         layer.current = True
                     else:
                         layer.on = False
-            
+
             rt.redrawViews()
-            
+
             for i in range(self.scene_list.count()):
                  self.set_item_dirty(self.scene_list.item(i), False)
-            
+
         self.update_list_highlights()
-        
+
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 
     def force_clean_and_restart_timer(self, use_temp_save=False):
         """
         Fuerza el estado 'limpio' en Max y reinicia el timer.
-        
+
         Args:
             use_temp_save (bool): Si True, guarda escena a un archivo temporal.
-                                  Esto es más lento pero mucho más robusto para 
+                                  Esto es más lento pero mucho más robusto para
                                   limpiar flags persistentes tras modificaciones reales.
                                   Si False, usa un reset ligero (setSaveRequired) para switches rápidos.
         """
@@ -663,16 +720,16 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                     temp_dir = rt.getdir(rt.name("temp"))
                     temp_file = os.path.join(temp_dir, "SceneSwitcher_Master_Reset.max")
                     rt.saveMaxFile(temp_file, quiet=True)
-                
+
                 rt.setSaveRequired(False)
-                
+
                 if self.active_scene_item:
                     self.set_item_dirty(self.active_scene_item, False)
                 self.is_ui_dirty = False
-                
+
             except Exception as e:
                 pass
-        
+
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
 
@@ -692,7 +749,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             try:
                 is_dirty = rt.getSaveRequired()
             except:
-                return 
+                return
 
         if is_dirty != self.is_ui_dirty:
             self.set_item_dirty(self.active_scene_item, is_dirty)
@@ -710,18 +767,18 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         if MAX_AVAILABLE and rt.getSaveRequired():
             active_path = self.active_scene_item.data(QtCore.Qt.UserRole)
-            
+
             msg_text = (f"Do you want to save the changes you made in the scene:\n\n"
                         f"{active_path}")
-            
+
             msg_box = QtWidgets.QMessageBox(self)
             msg_box.setWindowTitle("Scene has been modified")
             msg_box.setText(msg_text)
-            
+
             btn_save = msg_box.addButton("Save", QtWidgets.QMessageBox.AcceptRole)
-            btn_dont_save = msg_box.addButton("Don't Save", QtWidgets.QMessageBox.DestructiveRole) 
+            btn_dont_save = msg_box.addButton("Don't Save", QtWidgets.QMessageBox.DestructiveRole)
             btn_cancel = msg_box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
-            
+
             btn_save.setStyleSheet("""
                 background-color: #1e9bfd;
                 color: white;
@@ -730,23 +787,23 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 padding: 5px 25px; /* Larger padding */
                 font-weight: bold;
             """)
-            
+
             btn_dont_save.setStyleSheet("padding: 5px 15px;")
             btn_cancel.setStyleSheet("padding: 5px 15px;")
-            
+
             msg_box.exec_()
-            
+
             clicked_button = msg_box.clickedButton()
-            
+
             if clicked_button == btn_save:
                 saved = self.action_save_selected()
                 return saved
             elif clicked_button == btn_dont_save:
                 QtCore.QTimer.singleShot(100, lambda: self.force_clean_and_restart_timer(use_temp_save=True))
-                return True 
+                return True
             else:
                 return False
-                
+
         return True
 
     def update_list_highlights(self):
@@ -786,7 +843,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         target_file = self.active_scene_item.data(QtCore.Qt.UserRole)
         layer_name = self.active_scene_item.data(QtCore.Qt.UserRole + 1)
-        
+
         display_name = os.path.splitext(os.path.basename(target_file))[0]
         suffix = f" ({display_name})"
 
@@ -795,13 +852,13 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if MAX_AVAILABLE:
             user_selection = list(rt.selection)
             selection_was_empty = (len(user_selection) == 0)
-            
+
             root_layer = rt.LayerManager.getLayerFromName(layer_name)
             if not root_layer:
                 QtWidgets.QMessageBox.warning(self, "Error", f"Root Layer '{layer_name}' not found!")
                 self.dirty_timer.start(500)
                 return False
-            
+
             all_layers_cache = []
             for i in range(rt.LayerManager.count):
                 all_layers_cache.append(rt.LayerManager.getLayer(i))
@@ -823,55 +880,55 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                     desc_list.append(child)
                     desc_list.extend(collect_descendants_recursive(child))
                 return desc_list
-            
+
             descendants = collect_descendants_recursive(root_layer)
 
             valid_layer_names = set()
             valid_layer_names.add(root_layer.name)
             for l in descendants:
                 valid_layer_names.add(l.name)
-            
+
             nodes_to_save = []
-            
+
             for obj in rt.objects:
                 if obj.layer.name in valid_layer_names:
                     nodes_to_save.append(obj)
-            
+
             layer0_sub_name = f"0{suffix}"
             moved_nodes_restore_map = {}
-            
+
             global_layer_0 = rt.LayerManager.getLayer(0)
-            
+
             for obj in nodes_to_save:
                 current_layer_name = obj.layer.name
-                
+
                 if current_layer_name == layer0_sub_name:
                     moved_nodes_restore_map[obj] = obj.layer
-                
+
                 elif current_layer_name == layer_name:
                      moved_nodes_restore_map[obj] = obj.layer
 
             if moved_nodes_restore_map:
                 for obj in moved_nodes_restore_map.keys():
                     global_layer_0.addNode(obj)
-            
+
             for layer in descendants:
                 original_name = layer.name
                 original_parent = layer.getParent()
-                
+
                 state_map[layer] = {'name': original_name, 'parent': original_parent}
-                
+
                 if original_name.endswith(suffix):
                     clean_name = original_name[:-len(suffix)]
-                    
+
                     if clean_name == "0":
                         continue
-                        
+
                     try:
                         layer.setName(clean_name)
                     except:
                         pass
-                        
+
                 if original_parent and original_parent.name == root_layer.name:
                     try:
                         layer.setParent(rt.undefined)
@@ -879,42 +936,42 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                         pass
 
             rt.clearSelection()
-            
+
             if nodes_to_save:
                 try:
                     rt.select(nodes_to_save)
                 except Exception as e:
                     pass
-            
+
             final_selection = rt.selection
             count_sel = final_selection.count
-            
+
             if count_sel > 0:
                 result = rt.saveNodes(final_selection, target_file, quiet=True)
                 save_success = True
-            
+
             for layer, state in state_map.items():
                 try:
                     if state['parent']:
                         layer.setParent(state['parent'])
-                    
+
                     if layer.name != state['name']:
                         layer.setName(state['name'])
                 except Exception as e:
                     pass
-            
+
             for obj, original_layer in moved_nodes_restore_map.items():
                 try:
                     original_layer.addNode(obj)
                 except Exception as e:
                     pass
-            
+
             rt.clearSelection()
             if not selection_was_empty:
                 try:
                     rt.select(user_selection)
                 except: pass
-            
+
             rt.enableRefMsgs()
             rt.redrawViews()
 
@@ -925,7 +982,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 pass
             QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=True))
             return True
-        
+
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=True))
         return False
 
@@ -941,7 +998,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             temp_path = os.path.join(rt.getdir(rt.name("temp")), "temp_clipboard.max")
             if os.path.exists(temp_path):
                 rt.mergeMaxFile(temp_path, rt.name("mergeDups"), rt.name("select"), quiet=True)
-                
+
                 if self.active_scene_item:
                     layer_name = self.active_scene_item.data(QtCore.Qt.UserRole + 1)
                     layer = rt.LayerManager.getLayerFromName(layer_name)
@@ -966,7 +1023,7 @@ def run_max_ui():
         dock.show()
     else:
         dock.show()
-        
+
     return dock
 
 if __name__ == "__main__":

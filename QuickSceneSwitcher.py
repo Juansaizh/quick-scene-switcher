@@ -401,8 +401,10 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             background-color: #707070;
         }
         QCheckBox::indicator:checked {
-            background-color: #1e9bfd; /* Blue when checked */
-            border: 1px solid #1e9bfd;
+            width: 6px;
+            height: 6px;
+            background-color: #474747; /* Blue when checked */
+            border: 5px solid #d4d4d4;
         }
         """
         self.setStyleSheet(qss)

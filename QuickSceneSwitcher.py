@@ -484,7 +484,8 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if MAX_AVAILABLE:
             rt.clearSelection()
             rt.redrawViews()
-        
+            self.clean_up_material_names()
+
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 
     def generate_unique_suffix(self):

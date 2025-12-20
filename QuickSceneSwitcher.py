@@ -83,9 +83,25 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.init_ui()
         self.apply_styles()
 
+        if MAX_AVAILABLE:
+            try:
+                # Initialize global variables
+                rt.execute('global QSS_IsActive = true')
+                rt.execute('global QSS_ActiveScenePath = ""')
+                rt.execute('global QSS_ActiveLayerName = ""')
+            except:
+                pass
+
     def closeEvent(self, event):
         if hasattr(self, 'dirty_timer'):
             self.dirty_timer.stop()
+        
+        if MAX_AVAILABLE:
+            try:
+                rt.execute('global QSS_IsActive = false')
+            except:
+                pass
+                
         event.accept()
 
     def init_ui(self):
@@ -507,7 +523,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 # Find the index of the suffix
                 split_name = mat_name.split(".Duplicate.")
                 original_name = split_name[0]
-                
+
                 # Rename back to original
                 # Since Max allows duplicate names, this is safe and desired
                 try:
@@ -515,7 +531,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                     duplicates_cleaned += 1
                 except:
                     pass
-        
+
         print(f"Cleaned up {duplicates_cleaned} duplicate material names.")
 
     def import_single_scene(self, full_path, index=0, is_reload=False):
@@ -544,12 +560,12 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 existing_layer_names.add(rt.LayerManager.getLayer(i).name)
 
             rt.mergeMaxFile(full_path, rt.name("mergeDups"), rt.name("select"), quiet=True)
-            
+
             # --- UNIQUE MATERIAL RENAMING START ---
             # To prevent name collisions during subsequent merges, we give unique names
             # to the materials of the newly merged objects.
             unique_suffix = self.generate_unique_suffix()
-            
+
             # Helper to recursively get materials from an object
             def get_materials_from_nodes(nodes):
                 mats = set()
@@ -560,7 +576,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
             merged_objects = list(rt.selection)
             merged_materials = get_materials_from_nodes(merged_objects)
-            
+
             for mat in merged_materials:
                 # Append unique suffix
                 # e.g. "Wood" -> "Wood.Duplicate.a1b2c3d4"
@@ -655,6 +671,14 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             if index == 0:
                 self.active_scene_item = item
                 self.highlight_item(item, True)
+                # Initialize globals for the first item
+                if MAX_AVAILABLE:
+                    try:
+                        safe_path = full_path.replace("\\", "\\\\")
+                        rt.execute(f'QSS_ActiveScenePath = @"{safe_path}"')
+                        rt.execute(f'QSS_ActiveLayerName = @"{display_name}"')
+                    except:
+                        pass
             else:
                 self.highlight_item(item, False)
 
@@ -700,6 +724,16 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                  self.set_item_dirty(self.scene_list.item(i), False)
 
         self.update_list_highlights()
+
+        if MAX_AVAILABLE:
+            try:
+                full_path = self.active_scene_item.data(QtCore.Qt.UserRole)
+                safe_path = full_path.replace("\\", "\\\\")
+                # display_name is already in tgt_layer_name
+                rt.execute(f'QSS_ActiveScenePath = @"{safe_path}"')
+                rt.execute(f'QSS_ActiveLayerName = @"{tgt_layer_name}"')
+            except:
+                pass
 
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 

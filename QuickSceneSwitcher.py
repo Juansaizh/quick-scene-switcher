@@ -380,7 +380,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         }
         QListWidget {
             border: 1px solid #383838;
-            background-color: #444444;
+            background-color: #4f4f4f;
             border-radius: 3px;
             outline: none;
             color: #ffffff;

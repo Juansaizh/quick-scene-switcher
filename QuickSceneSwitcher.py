@@ -101,6 +101,15 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
             painter.setBrush(QtGui.QBrush(QtGui.QColor("#44ff44")))
             painter.drawEllipse(QtCore.QPointF(center_x_green, center_y), radius, radius)
 
+        # 4. Check if EXTERNAL CHANGE DETECTED (UserRole + 4) - Left of Green (with spacing)
+        # This is non-interactive, just an indicator
+        has_external_change = index.data(QtCore.Qt.UserRole + 4)
+        if has_external_change:
+             # 3rd strip position: Right - Strip - Gap - Strip - Gap - (Strip/2)
+             center_x_white = base_right - (self.strip_width * 2) - (self.dot_spacing * 2) - (self.strip_width / 2)
+             painter.setBrush(QtGui.QBrush(QtGui.QColor("#ffffff")))
+             painter.drawEllipse(QtCore.QPointF(center_x_white, center_y), radius, radius)
+
         painter.restore()
 
     def editorEvent(self, event, model, option, index):
@@ -313,6 +322,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.is_ui_dirty = False
 
         self.file_timestamps = {}
+        self.background_check_counter = 0 # Counter for slower background checks
 
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
@@ -385,7 +395,43 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         """Wrapper to check both internal dirty state and external file changes."""
         self.check_dirty_status()
         self.check_external_changes()
+        
+        # Background check for inactive scenes (approx every 5s if timer is 500ms)
+        self.background_check_counter += 1
+        if self.background_check_counter >= 10:
+            self.check_background_files()
+            self.background_check_counter = 0
 
+    def check_background_files(self):
+        """
+        Checks all inactive scenes for external modifications.
+        Sets UserRole + 4 to True/False based on modification state.
+        """
+        for i in range(self.scene_list.count()):
+            item = self.scene_list.item(i)
+            
+            # Skip active scene (handled by check_external_changes)
+            if item == self.active_scene_item:
+                continue
+                
+            full_path = item.data(QtCore.Qt.UserRole)
+            if not full_path or full_path not in self.file_timestamps:
+                continue
+                
+            try:
+                current_mtime = os.path.getmtime(full_path)
+                last_mtime = self.file_timestamps[full_path]
+                
+                has_changed = current_mtime > last_mtime
+                
+                # Only update/redraw if state changed to avoid flickering
+                current_flag = item.data(QtCore.Qt.UserRole + 4)
+                if current_flag != has_changed:
+                    item.setData(QtCore.Qt.UserRole + 4, has_changed)
+                    
+            except Exception:
+                pass
+                
     def check_external_changes(self):
         """
         Revisa si el archivo de la escena activa ha sido modificado externamente.
@@ -435,20 +481,22 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 self.dirty_timer.start(500)
 
     def reload_active_scene(self):
+        """Wrapper for reloading the active scene."""
+        if self.active_scene_item:
+            self.reload_scene(self.active_scene_item)
+        else:
+             self.dirty_timer.start(500)
+
+    def reload_scene(self, item):
         """
-        Reloads ONLY the active scene (Layer).
-        1. Delete objects in active layer hierarchy.
+        Reloads a specific scene item.
+        1. Delete objects in its layer hierarchy.
         2. Re-import file.
         3. Restore state.
         """
-        if not self.active_scene_item:
-            self.dirty_timer.start(500)
-            return
-
-        full_path = self.active_scene_item.data(QtCore.Qt.UserRole)
-        display_name = self.active_scene_item.data(QtCore.Qt.UserRole + 1)
-
-        index = self.scene_list.row(self.active_scene_item)
+        full_path = item.data(QtCore.Qt.UserRole)
+        display_name = item.data(QtCore.Qt.UserRole + 1)
+        index = self.scene_list.row(item)
 
         if MAX_AVAILABLE:
             rt.disableRefMsgs()
@@ -494,6 +542,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                              pass
 
                 self.import_single_scene(full_path, index, is_reload=True)
+                
+                # Clear external modification flag (White Circle)
+                item.setData(QtCore.Qt.UserRole + 4, False)
 
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Reload Error", str(e))
@@ -506,17 +557,28 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
              try:
                 self.file_timestamps[full_path] = os.path.getmtime(full_path)
              except: pass
-
-        self.dirty_timer.start(500)
+        
+        # Only restart timer if we are reloading the active scene or finished a batch
+        if item == self.active_scene_item:
+            self.dirty_timer.start(500)
 
     def check_dirty_status(self):
         """Revisa si la escena de Max necesita guardado y actualiza la UI."""
         if not self.active_scene_item:
             return
 
+        if hasattr(self, 'disable_detection_cb') and self.disable_detection_cb.isChecked():
+            if self.is_ui_dirty:
+                self.set_item_dirty(self.active_scene_item, False)
+                self.is_ui_dirty = False
+            return
+
         is_dirty = False
         if MAX_AVAILABLE:
-            is_dirty = rt.getSaveRequired()
+            try:
+                is_dirty = rt.getSaveRequired()
+            except:
+                return
 
         if is_dirty != self.is_ui_dirty:
             self.set_item_dirty(self.active_scene_item, is_dirty)
@@ -934,30 +996,88 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
     def action_batch_save(self):
         """Iterates through marked scenes and saves them."""
-        # We process ALL green marked items
-        # No safety check for current scene changes as requested.
-        
+        # 1. Collect Items
         items_to_save = []
+        conflicting_items = []
+        
         for i in range(self.scene_list.count()):
             item = self.scene_list.item(i)
+            # Check Green Marker (UserRole + 3)
             if item.data(QtCore.Qt.UserRole + 3):
                 items_to_save.append(item)
+                # Check CONFLICT: Green + White (UserRole + 4)
+                if item.data(QtCore.Qt.UserRole + 4):
+                    conflicting_items.append(item)
         
         if not items_to_save:
             return
 
+        # 2. Handle Conflicts
+        if conflicting_items:
+            scene_names = "\n".join([f"- {item.text()}" for item in conflicting_items])
+            
+            msg_box = QtWidgets.QMessageBox(self)
+            msg_box.setWindowTitle("External Modifications Detected")
+            msg_box.setText(f"The following scenes have been modified externally:\n\n{scene_names}")
+            
+            btn_reload = msg_box.addButton("Reload All", QtWidgets.QMessageBox.AcceptRole)
+            btn_overwrite = msg_box.addButton("Overwrite", QtWidgets.QMessageBox.DestructiveRole)
+            btn_cancel = msg_box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
+            
+            # Button Styles
+            # Blue for Reload (Safest/Recommended action in this context?)
+            btn_reload.setStyleSheet("""
+                background-color: #1e9bfd;
+                color: white;
+                border: 1px solid #1e9bfd;
+                border-radius: 3px;
+                padding: 5px 15px;
+            """)
+            btn_overwrite.setStyleSheet("padding: 5px 15px;")
+            btn_cancel.setStyleSheet("padding: 5px 15px;")
+            
+            msg_box.exec_()
+            
+            clicked = msg_box.clickedButton()
+            
+            if clicked == btn_cancel:
+                return
+            
+            elif clicked == btn_reload:
+                # Reload conflicting items ONLY, then STOP.
+                self.dirty_timer.stop()
+                try:
+                    for item in conflicting_items:
+                        # We must first switch to scene to ensure clean context if needed, 
+                        # relying on reload_scene logic
+                        self._perform_scene_switch(item) # Switch to the scene to reload it
+                        self.reload_scene(item) # Perform the reload
+                finally:
+                    self.dirty_timer.start(500)
+                return 
+                
+            elif clicked == btn_overwrite:
+                # Proceed to save naturally (ignoring white markers)
+                pass
+
+        # 3. Perform Save
+        self._perform_batch_save(items_to_save)
+
+    def _perform_batch_save(self, items_to_save):
+        """Actual batch save loop."""
         # Disable updates/timers during batch
         self.dirty_timer.stop()
         
-        # Batch Process
-        for item in items_to_save:
-            # Switch to scene WITHOUT prompting
-            self._perform_scene_switch(item)
-            # Save
-            self.action_save_selected()
-            
-        QtWidgets.QMessageBox.information(self, "Batch Complete", f"Saved {len(items_to_save)} scenes.")
-        self.dirty_timer.start(500)
+        try:
+            for item in items_to_save:
+                # Switch to scene WITHOUT prompting
+                self._perform_scene_switch(item)
+                # Save
+                self.action_save_selected()
+                
+            QtWidgets.QMessageBox.information(self, "Batch Complete", f"Saved {len(items_to_save)} scenes.")
+        finally:
+            self.dirty_timer.start(500)
 
     def switch_to_scene_layer(self, item):
         """

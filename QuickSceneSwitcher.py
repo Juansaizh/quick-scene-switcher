@@ -61,7 +61,75 @@ def get_icon(max_name, fallback_standard_icon_attr=None, style=None):
     if style and fallback_standard_icon_attr is not None:
         return style.standardIcon(fallback_standard_icon_attr)
 
+
     return QtGui.QIcon()
+
+class SceneDelegate(QtWidgets.QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(SceneDelegate, self).__init__(parent)
+        self.strip_width = 20
+        self.right_margin = 10 
+        self.dot_spacing = 10
+
+    def paint(self, painter, option, index):
+        # 1. Draw default
+        super(SceneDelegate, self).paint(painter, option, index)
+        
+        rect = option.rect
+        center_y = rect.center().y()
+        radius = 5
+        
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtCore.Qt.NoPen)
+        
+        # Base right edge for calculations
+        base_right = rect.right() - self.right_margin
+
+        # 2. Check if marked CYAN (UserRole + 2) - Rightmost
+        is_marked_cyan = index.data(QtCore.Qt.UserRole + 2)
+        if is_marked_cyan:
+            center_x_cyan = base_right - (self.strip_width / 2)
+            painter.setBrush(QtGui.QBrush(QtGui.QColor("#47c0c0")))
+            painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
+
+        # 3. Check if marked GREEN (UserRole + 3) - Left of Cyan (with spacing)
+        is_marked_green = index.data(QtCore.Qt.UserRole + 3)
+        if is_marked_green:
+            # 2nd strip from right + spacing
+            center_x_green = base_right - self.strip_width - self.dot_spacing - (self.strip_width / 2)
+            painter.setBrush(QtGui.QBrush(QtGui.QColor("#44ff44")))
+            painter.drawEllipse(QtCore.QPointF(center_x_green, center_y), radius, radius)
+
+        painter.restore()
+
+    def editorEvent(self, event, model, option, index):
+        # Handle interaction (Click on strips)
+        if event.type() == QtCore.QEvent.MouseButtonRelease:
+            click_x = event.pos().x()
+            rect = option.rect
+            
+            base_right = rect.right() - self.right_margin
+            
+            # Cyan Strip (Rightmost strip area)
+            # Range: [base_right - strip_width, base_right]
+            if click_x > (base_right - self.strip_width) and click_x <= base_right:
+                current_state = index.data(QtCore.Qt.UserRole + 2)
+                model.setData(index, not current_state, QtCore.Qt.UserRole + 2)
+                return True 
+            
+            # Green Strip (Left of Cyan + Spacing)
+            # Range: [base_right - strip_width - spacing - strip_width, base_right - strip_width - spacing]
+            green_right_edge = base_right - self.strip_width - self.dot_spacing
+            green_left_edge = green_right_edge - self.strip_width
+            
+            if click_x > green_left_edge and click_x <= green_right_edge:
+                current_state = index.data(QtCore.Qt.UserRole + 3)
+                model.setData(index, not current_state, QtCore.Qt.UserRole + 3)
+                return True
+                
+        return super(SceneDelegate, self).editorEvent(event, model, option, index)
+
 
 class SceneSwitcherUI(QtWidgets.QDockWidget):
     def __init__(self, parent=None):
@@ -89,6 +157,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 rt.execute('global QSS_IsActive = true')
                 rt.execute('global QSS_ActiveScenePath = ""')
                 rt.execute('global QSS_ActiveLayerName = ""')
+                rt.execute('global QSS_CyanMarkedScenes = #()')
             except:
                 pass
 
@@ -137,13 +206,69 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         path_container_layout.addLayout(path_input_layout)
         main_layout.addLayout(path_container_layout)
 
+        # Header Layout (Folder Name + Master Checkboxes)
+        header_layout = QtWidgets.QHBoxLayout()
+        header_layout.setSpacing(10) # Spacing between elements (Label, Checkboxes)
+        
         self.folder_name_label = QtWidgets.QLabel("")
         self.folder_name_label.setStyleSheet("color: #ffffff; font-weight: bold; font-size: 15px; margin-top: 3px; margin-bottom: 3px;")
-        main_layout.addWidget(self.folder_name_label)
+        
+        self.master_green_checkbox = QtWidgets.QCheckBox()
+        self.master_green_checkbox.setFixedWidth(20) 
+        self.master_green_checkbox.setToolTip("Mark/Unmark All Green")
+        self.master_green_checkbox.clicked.connect(self.toggle_all_green_markers)
+        
+        # Green Checkbox Style
+        # Replicating the 'dot' style from main CSS but with Green colors
+        self.master_green_checkbox.setStyleSheet("""
+            QCheckBox::indicator:checked {
+                width: 6px;
+                height: 6px;
+                border-radius: 8px;
+                background-color: #474747;
+                border: 5px solid #44ff44;
+            }
+        """)
+
+        self.master_checkbox = QtWidgets.QCheckBox()
+        self.master_checkbox.setFixedWidth(20) 
+        self.master_checkbox.setToolTip("Mark/Unmark All Cyan")
+        self.master_checkbox.clicked.connect(self.toggle_all_markers)
+        
+        # Cyan Checkbox Style
+        self.master_checkbox.setStyleSheet("""
+            QCheckBox::indicator:checked {
+                width: 6px;
+                height: 6px;
+                border-radius: 8px;
+                background-color: #474747;
+                border: 5px solid #47c0c0;
+            }
+        """)
+        
+        # Spacer
+        header_layout.addWidget(self.folder_name_label)
+        header_layout.addStretch()
+        header_layout.addWidget(self.master_green_checkbox)
+        header_layout.addWidget(self.master_checkbox)
+        
+        # Add a small margin to right to align better with list scrollbar/content
+        # Increased margin to match SceneDelegate right_margin (10) + scrollbar visual compensation
+        header_layout.setContentsMargins(0, 0, 10, 0) 
+        
+        main_layout.addLayout(header_layout)
 
         self.scene_list = QtWidgets.QListWidget()
         self.scene_list.setAlternatingRowColors(True)
         self.scene_list.itemDoubleClicked.connect(self.switch_to_scene_layer)
+        # Connect dataChanged to check for green markers AND update Cyan global
+        self.scene_list.model().dataChanged.connect(self.check_green_markers_state)
+        self.scene_list.model().dataChanged.connect(self.update_cyan_global_variable)
+        
+        # Set Custom Delegate
+        self.delegate = SceneDelegate(self.scene_list)
+        self.scene_list.setItemDelegate(self.delegate)
+        
         main_layout.addWidget(self.scene_list)
 
         action_layout = QtWidgets.QHBoxLayout()
@@ -157,7 +282,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.save_btn.setIconSize(QtCore.QSize(16,16))
         self.save_btn.setFixedHeight(35)
         self.save_btn.setToolTip("Save the current scene (layer) back to its file")
-        self.save_btn.clicked.connect(self.action_save_selected)
+        self.save_btn.clicked.connect(self.action_save_wrapper) # Changed to wrapper
 
         self.copy_btn = QtWidgets.QPushButton(" Copy")
         self.copy_btn.setIcon(icon_copy)
@@ -190,6 +315,85 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
+
+        # Add placeholders for UI testing
+        self.add_placeholders()
+
+    def add_placeholders(self):
+        """Adds dummy items to list for UI iteration."""
+        for i in range(1, 11):
+            name = f"Placeholder Scene {i:02d}"
+            icon = get_icon("Citras/3dsMax", QtWidgets.QStyle.SP_FileIcon, self.style())
+            item = QtWidgets.QListWidgetItem(icon, name)
+            # Empty path indicates it's a placeholder
+            item.setData(QtCore.Qt.UserRole, "")
+            item.setData(QtCore.Qt.UserRole + 1, name)
+            self.scene_list.addItem(item)
+        # End of placeholder addition
+
+    def toggle_all_markers(self):
+        """Toggles the marked state for all items based on master checkbox (CYAN)."""
+        state = self.master_checkbox.isChecked()
+        
+        # Block signals to prevent massive dataChanged spam
+        self.scene_list.model().blockSignals(True)
+        try:
+            for i in range(self.scene_list.count()):
+                item = self.scene_list.item(i)
+                item.setData(QtCore.Qt.UserRole + 2, state)
+        finally:
+            self.scene_list.model().blockSignals(False)
+        
+        self.scene_list.viewport().update()
+        self.update_cyan_global_variable() # Update global immediately
+
+    def toggle_all_green_markers(self):
+        """Toggles the marked state for all items based on master checkbox (GREEN)."""
+        state = self.master_green_checkbox.isChecked()
+        
+        # Block signals to prevent massive dataChanged spam
+        self.scene_list.model().blockSignals(True)
+        try:
+            for i in range(self.scene_list.count()):
+                item = self.scene_list.item(i)
+                item.setData(QtCore.Qt.UserRole + 3, state)
+        finally:
+            self.scene_list.model().blockSignals(False)
+        
+        self.scene_list.viewport().update()
+        self.check_green_markers_state() # Update UI immediately
+
+    def update_cyan_global_variable(self):
+        """
+        Updates the global MaxScript variable `QSS_CyanMarkedScenes` 
+        with the currently marked Cyan scenes (LayerName, Path).
+        Format: #(#("Layer", "Path"), ...)
+        """
+        if not MAX_AVAILABLE:
+            return
+
+        marked_data = []
+        for i in range(self.scene_list.count()):
+            item = self.scene_list.item(i)
+            # Check Cyan Marker (UserRole + 2)
+            if item.data(QtCore.Qt.UserRole + 2):
+                layer_name = item.data(QtCore.Qt.UserRole + 1)
+                full_path = item.data(QtCore.Qt.UserRole)
+                
+                # Escape backslashes for MaxScript string
+                safe_path = full_path.replace("\\", "\\\\")
+                marked_data.append(f'#("{layer_name}", "{safe_path}")')
+        
+        # Construct MaxScript array string
+        if marked_data:
+            mxs_array_str = "#(" + ", ".join(marked_data) + ")"
+        else:
+            mxs_array_str = "#()"
+            
+        try:
+            rt.execute(f'global QSS_CyanMarkedScenes = {mxs_array_str}')
+        except Exception as e:
+            print(f"Error updating global QSS_CyanMarkedScenes: {e}")
 
     def check_modifications(self):
         """Wrapper to check both internal dirty state and external file changes."""
@@ -488,6 +692,12 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if MAX_AVAILABLE:
             rt.resetMaxFile(quiet=True)
             rt.setSaveRequired(False)
+            
+        # Reset Master Checkboxes
+        self.master_checkbox.setChecked(False)
+        self.master_green_checkbox.setChecked(False)
+        # Force UI update for button state (will be "Save" since list is cleared below)
+        self.check_green_markers_state() 
 
         self.scene_list.clear()
 
@@ -501,6 +711,13 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             rt.clearSelection()
             rt.redrawViews()
             self.clean_up_material_names()
+            
+            # Activate the first scene by default so the active layer is correct
+            if self.scene_list.count() > 0:
+                first_item = self.scene_list.item(0)
+                self.scene_list.setCurrentItem(first_item)
+                # Use _perform_scene_switch to skip dirty checks (we just loaded)
+                self._perform_scene_switch(first_item)
 
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 
@@ -683,23 +900,104 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 self.highlight_item(item, False)
 
 
+    def check_green_markers_state(self):
+        """Updates Save button text and style based on green markers."""
+        has_green_markers = False
+        for i in range(self.scene_list.count()):
+            if self.scene_list.item(i).data(QtCore.Qt.UserRole + 3): # Green marker
+                has_green_markers = True
+                break
+        
+        if has_green_markers:
+            self.save_btn.setText(" Save marked")
+            self.save_btn.setToolTip("Save all green-marked scenes sequentially")
+            # Green border on hover style
+            self.save_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #646464;
+                    border: 1px solid #555;
+                    color: #ffffff;
+                }
+                QPushButton:hover {
+                     background-color: #383838;
+                     border: 1px solid #44ff44; /* Green Border */
+                }
+            """)
+        else:
+            self.save_btn.setText(" Save")
+            self.save_btn.setToolTip("Save the current scene (layer) back to its file")
+            # Revert to standard action style (defined in init or elsewhere, but we set it here explicitly to match apply_styles)
+            self.save_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #646464;
+                    border: 1px solid #555;
+                    color: #ffffff;
+                }
+                QPushButton:hover {
+                     background-color: #383838;
+                     border: 1px solid #999;
+                }
+            """)
+
+    def action_save_wrapper(self):
+        """Decides whether to do a single save or batch save."""
+        if "marked" in self.save_btn.text():
+            self.action_batch_save()
+        else:
+            self.action_save_selected()
+
+    def action_batch_save(self):
+        """Iterates through marked scenes and saves them."""
+        # We process ALL green marked items
+        # No safety check for current scene changes as requested.
+        
+        items_to_save = []
+        for i in range(self.scene_list.count()):
+            item = self.scene_list.item(i)
+            if item.data(QtCore.Qt.UserRole + 3):
+                items_to_save.append(item)
+        
+        if not items_to_save:
+            return
+
+        # Disable updates/timers during batch
+        self.dirty_timer.stop()
+        
+        # Batch Process
+        for item in items_to_save:
+            # Switch to scene WITHOUT prompting
+            self._perform_scene_switch(item)
+            # Save
+            self.action_save_selected()
+            
+        QtWidgets.QMessageBox.information(self, "Batch Complete", f"Saved {len(items_to_save)} scenes.")
+        self.dirty_timer.start(500)
+
     def switch_to_scene_layer(self, item):
         """
         Al hacer doble click:
-        1. Verifica cambios sin guardar.
-        2. Oculta TODAS las capas de la lista.
-        3. Muestra SOLO la capa asociada al item clickado.
-        4. Actualiza UI (negrita).
+        1. Verifica cambios sin guardar (User Interaction).
+        2. Llama a _perform_scene_switch.
         """
         if item == self.active_scene_item:
             return
+
+        # Check if it is a placeholder
+        path = item.data(QtCore.Qt.UserRole)
+        if not path:
+             return
+        # End of placeholder check
 
         self.dirty_timer.stop()
 
         if not self.check_unsaved_changes():
             self.dirty_timer.start(500)
             return
+            
+        self._perform_scene_switch(item)
 
+    def _perform_scene_switch(self, item):
+        """Actual switching logic, separated for Automation."""
         tgt_layer_name = item.data(QtCore.Qt.UserRole + 1)
         self.active_scene_item = item
 

@@ -66,14 +66,14 @@ def get_icon(max_name, fallback_standard_icon_attr=None, style=None):
 
 class SceneDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, parent=None):
-        super(SceneDelegate, self).__init__(parent)
+        super().__init__(parent)
         self.strip_width = 20
         self.right_margin = 10 
         self.dot_spacing = 10
 
     def paint(self, painter, option, index):
         # 1. Draw default
-        super(SceneDelegate, self).paint(painter, option, index)
+        super().paint(painter, option, index)
         
         rect = option.rect
         center_y = rect.center().y()
@@ -128,14 +128,14 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
                 model.setData(index, not current_state, QtCore.Qt.UserRole + 3)
                 return True
                 
-        return super(SceneDelegate, self).editorEvent(event, model, option, index)
+        return super().editorEvent(event, model, option, index)
 
 
 class SceneSwitcherUI(QtWidgets.QDockWidget):
     def __init__(self, parent=None):
         if MAX_AVAILABLE and parent is None:
             parent = QtWidgets.QWidget.find(rt.windows.getMAXHWND())
-        super(SceneSwitcherUI, self).__init__(parent)
+        super().__init__(parent)
 
         self.setWindowTitle("Quick Scene Switcher")
         self.resize(350, 500)

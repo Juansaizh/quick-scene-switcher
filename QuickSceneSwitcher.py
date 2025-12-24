@@ -685,7 +685,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         }
         QPushButton:hover {
              background-color: #383838;
-             border: 1px solid #999;
+             border: 1px solid #383838;
         }
         """
         self.copy_btn.setStyleSheet(action_btn_style)
@@ -983,7 +983,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 }
                 QPushButton:hover {
                      background-color: #383838;
-                     border: 1px solid #999;
+                     border: 1px solid #383838;
                 }
             """)
 

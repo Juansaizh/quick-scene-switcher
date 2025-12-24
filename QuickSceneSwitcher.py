@@ -317,21 +317,6 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
 
-        # Add placeholders for UI testing
-        self.add_placeholders()
-
-    def add_placeholders(self):
-        """Adds dummy items to list for UI iteration."""
-        for i in range(1, 11):
-            name = f"Placeholder Scene {i:02d}"
-            icon = get_icon("Citras/3dsMax", QtWidgets.QStyle.SP_FileIcon, self.style())
-            item = QtWidgets.QListWidgetItem(icon, name)
-            # Empty path indicates it's a placeholder
-            item.setData(QtCore.Qt.UserRole, "")
-            item.setData(QtCore.Qt.UserRole + 1, name)
-            self.scene_list.addItem(item)
-        # End of placeholder addition
-
     def toggle_all_markers(self):
         """Toggles the marked state for all items based on master checkbox (CYAN)."""
         state = self.master_checkbox.isChecked()
@@ -982,12 +967,6 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         """
         if item == self.active_scene_item:
             return
-
-        # Check if it is a placeholder
-        path = item.data(QtCore.Qt.UserRole)
-        if not path:
-             return
-        # End of placeholder check
 
         self.dirty_timer.stop()
 

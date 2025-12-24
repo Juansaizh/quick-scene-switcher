@@ -179,7 +179,8 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         main_layout.setContentsMargins(15, 15, 15, 15)
 
         self.disable_detection_cb = QtWidgets.QCheckBox("Disable changes detection (faster)")
-        self.disable_detection_cb.setChecked(False)
+        self.disable_detection_cb.setChecked(True) # Enabled by default as requested
+        self.disable_detection_cb.setVisible(False) # Hidden from UI
         self.disable_detection_cb.stateChanged.connect(self.check_dirty_status)
         main_layout.addWidget(self.disable_detection_cb)
 

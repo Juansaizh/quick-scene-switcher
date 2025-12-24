@@ -1422,24 +1422,66 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         return False
 
     def action_copy(self):
+        """Stores the current selection in a global MaxScript variable (In-Memory)."""
         if MAX_AVAILABLE:
             selection = rt.selection
             if selection.count > 0:
-                temp_path = os.path.join(rt.getdir(rt.name("temp")), "temp_clipboard.max")
-                rt.saveNodes(selection, temp_path, quiet=True)
+                # Store actual node references
+                rt.execute("global QSS_ClipboardNodes = for o in selection collect o")
+            else:
+                rt.execute("global QSS_ClipboardNodes = undefined")
 
     def action_paste(self):
+        """Clones nodes from the global clipboard to the ACTIVE layer."""
         if MAX_AVAILABLE:
-            temp_path = os.path.join(rt.getdir(rt.name("temp")), "temp_clipboard.max")
-            if os.path.exists(temp_path):
-                rt.mergeMaxFile(temp_path, rt.name("mergeDups"), rt.name("select"), quiet=True)
+            # Check if we have valid nodes to paste
+            try:
+                # 1. Cleanup clipboard (remove deleted nodes)
+                rt.execute("""
+                if QSS_ClipboardNodes != undefined do (
+                    QSS_ClipboardNodes = for o in QSS_ClipboardNodes where isValidNode o collect o
+                )
+                """)
+                
+                clipboard_nodes = rt.QSS_ClipboardNodes
+                if not clipboard_nodes or len(clipboard_nodes) == 0:
+                    return
 
+                # 2. Get Active Layer
+                target_layer = None
                 if self.active_scene_item:
                     layer_name = self.active_scene_item.data(QtCore.Qt.UserRole + 1)
-                    layer = rt.LayerManager.getLayerFromName(layer_name)
-                    if layer:
-                        for node in rt.selection:
-                            layer.addNode(node)
+                    target_layer = rt.LayerManager.getLayerFromName(layer_name)
+                
+                if not target_layer:
+                    target_layer = rt.LayerManager.current
+                
+                # 3. Clone Nodes safely via MaxScript to capture the result 'newNodes'
+                # We use a global var QSS_LastPastedNodes to capture the output
+                rt.execute("""
+                    QSS_LastPastedNodes = #()
+                    maxOps.cloneNodes QSS_ClipboardNodes cloneType:#copy newNodes:&QSS_LastPastedNodes
+                """)
+                
+                pasted_nodes = rt.QSS_LastPastedNodes
+
+                if pasted_nodes and len(pasted_nodes) > 0:
+                    for i, new_obj in enumerate(pasted_nodes):
+                        # Restore original name
+                        original_obj = clipboard_nodes[i]
+                        try:
+                            new_obj.name = original_obj.name
+                        except: pass
+                        
+                        # Move to target layer
+                        target_layer.addNode(new_obj)
+                        
+                    rt.select(pasted_nodes)
+                    rt.redrawViews()
+                    
+            except Exception as e:
+                # print(f"Paste Error: {e}")
+                pass
 
 def run_max_ui():
     app = QtWidgets.QApplication.instance()

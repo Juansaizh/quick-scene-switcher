@@ -1131,6 +1131,30 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if not items_to_save:
             return
 
+        # Confirmation Dialog
+        count = len(items_to_save)
+        confirm_msg = QtWidgets.QMessageBox(self)
+        confirm_msg.setWindowTitle("Batch Save Confirmation")
+        confirm_msg.setText(f"You are about to save {count} scenes.\n\nDo you want to continue?")
+        
+        btn_continue = confirm_msg.addButton("Save Scenes", QtWidgets.QMessageBox.AcceptRole)
+        btn_abort = confirm_msg.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
+        
+        # Consistent Style
+        btn_continue.setStyleSheet("""
+            background-color: #1e9bfd;
+            color: white;
+            border: 1px solid #1e9bfd;
+            border-radius: 3px;
+            padding: 5px 15px;
+        """)
+        btn_abort.setStyleSheet("padding: 5px 15px;")
+        
+        confirm_msg.exec_()
+        
+        if confirm_msg.clickedButton() != btn_continue:
+            return
+
         # 2. Handle Conflicts
         if conflicting_items:
             scene_names = "\n".join([f"- {item.text()}" for item in conflicting_items])

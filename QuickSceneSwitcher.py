@@ -274,6 +274,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         # Connect dataChanged to check for green markers AND update Cyan global
         self.scene_list.model().dataChanged.connect(self.check_green_markers_state)
         self.scene_list.model().dataChanged.connect(self.update_cyan_global_variable)
+        self.scene_list.model().dataChanged.connect(self.update_master_checkboxes_state)
         
         # Set Custom Delegate
         self.delegate = SceneDelegate(self.scene_list)
@@ -986,6 +987,39 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                      border: 1px solid #383838;
                 }
             """)
+
+
+    def update_master_checkboxes_state(self):
+        """
+        Synchronizes the master checkboxes with the state of individual items.
+        If all items are checked -> Master Checked.
+        If any item is unchecked -> Master Unchecked.
+        """
+        count = self.scene_list.count()
+        if count == 0:
+            self.master_checkbox.setChecked(False)
+            self.master_green_checkbox.setChecked(False)
+            return
+
+        all_cyan = True
+        all_green = True
+
+        for i in range(count):
+            item = self.scene_list.item(i)
+            # Check Cyan (UserRole + 2)
+            if not item.data(QtCore.Qt.UserRole + 2):
+                all_cyan = False
+            
+            # Check Green (UserRole + 3)
+            if not item.data(QtCore.Qt.UserRole + 3):
+                all_green = False
+
+            if not all_cyan and not all_green:
+                break
+
+        # Update Master Safe (we connect to clicked, so setChecked doesn't trigger loop)
+        self.master_checkbox.setChecked(all_cyan)
+        self.master_green_checkbox.setChecked(all_green)
 
     def action_save_wrapper(self):
         """Decides whether to do a single save or batch save."""

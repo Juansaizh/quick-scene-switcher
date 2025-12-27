@@ -21,7 +21,7 @@
 import sys
 import os
 import uuid
-from PySide2 import QtWidgets, QtGui, QtCore
+from PySide2 import QtWidgets, QtGui, QtCore, QtSvg
 
 try:
     import pymxs
@@ -63,6 +63,29 @@ def get_icon(max_name, fallback_standard_icon_attr=None, style=None):
 
 
     return QtGui.QIcon()
+
+def create_svg_icon(svg_string, width=24, height=24, color_hex="#ffffff"):
+    """
+    Creates a QIcon from an SVG string.
+    Allows for simple color replacement (fill="#000000" -> fill="color_hex").
+    """
+    if not svg_string:
+        return QtGui.QIcon()
+        
+    # Simple tinting: replace a placeholder or standard black with desired color
+    # This is a basic example; for complex SVGs use a proper XML parser or Qt's coloring
+    svg_data = svg_string.replace('fill="currentColor"', f'fill="{color_hex}"')
+    
+    # Render SVG to QPixmap
+    renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(svg_data.encode('utf-8')))
+    pixmap = QtGui.QPixmap(width, height)
+    pixmap.fill(QtCore.Qt.transparent)
+    
+    painter = QtGui.QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    
+    return QtGui.QIcon(pixmap)
 
 class SceneDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, parent=None):
@@ -205,7 +228,16 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.path_le.setPlaceholderText("Select scene folder...")
 
         self.browse_btn = QtWidgets.QPushButton()
-        icon_dir = get_icon("Common/Folder", QtWidgets.QStyle.SP_DirIcon, self.style())
+        # icon_dir = get_icon("Common/Folder", QtWidgets.QStyle.SP_DirIcon, self.style())
+        
+        # Example SVG Icon (Folder)
+        svg_folder = """
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.20164 18.4693V7.26388C2.20164 6.30238 2.20164 5.82163 2.39535 5.45665C2.56453 5.13783 2.82521 4.88725 3.15574 4.72408C3.53413 4.53723 4.03254 4.53723 5.02936 4.53723H7.8156C8.59979 4.53723 8.99188 4.53723 9.35032 4.63665C9.66752 4.72462 9.96205 4.87817 10.2195 5.08988C10.5105 5.3292 10.7208 5.6446 11.1415 6.27541L11.5947 6.95509C12.0153 7.5859 12.2257 7.9013 12.5167 8.14062C12.7741 8.35233 13.0686 8.50588 13.3858 8.59385C13.7443 8.69327 14.1364 8.69327 14.9205 8.69327H18.9739C19.9707 8.69327 20.4691 8.69327 20.8475 8.88012C21.178 9.04329 21.4387 9.29387 21.6079 9.61269C21.8016 9.97767 21.8016 10.4584 21.8016 11.4199V18.4693C21.8016 19.4308 21.8016 19.9115 21.6079 20.2765C21.4387 20.5953 21.178 20.8459 20.8475 21.0091C20.4691 21.1959 19.9707 21.1959 18.9739 21.1959H5.02936C4.03254 21.1959 3.53413 21.1959 3.15574 21.0091C2.82521 20.8459 2.56453 20.5953 2.39535 20.2765C2.20164 19.9115 2.20164 19.4308 2.20164 18.4693Z" fill="currentColor"/>
+        </svg>
+        """
+        icon_dir = create_svg_icon(svg_folder, 24, 24, "#ffb620") # Example with orange/yellow tint
+        
         self.browse_btn.setIcon(icon_dir)
         self.browse_btn.setFixedSize(30, 30)
         self.browse_btn.clicked.connect(self.browse_folder)
@@ -284,9 +316,49 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         action_layout = QtWidgets.QHBoxLayout()
 
-        icon_save = get_icon("Common/Save", None, self.style())
-        icon_copy = get_icon("Common/Copy", None, self.style())
-        icon_paste = get_icon("Common/Paste", None, self.style())
+        # SVG Definitions
+        svg_save = """
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16.17L21 7.83V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M17 21V13H7V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7 3V8H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        """
+
+        svg_copy = """
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 9H11C10.4696 9 9.96086 9.21071 9.58579 9.58579C9.21071 9.96086 9 10.4696 9 11V20C9 20.5304 9.21071 21.0391 9.58579 21.4142C9.96086 21.7893 10.4696 22 11 22H20C20.5304 22 21.0391 21.7893 21.4142 21.4142C21.7893 21.0391 22 20.5304 22 20V11C22 10.4696 21.7893 9.96086 21.4142 9.58579C21.0391 9.21071 20.5304 9 20 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M5 15H4C3.46957 15 2.96086 14.7893 2.58579 14.4142C2.21071 14.0391 2 13.5304 2 13V4C2 3.46957 2.21071 2.96086 2.58579 2.58579C2.96086 2.21071 3.46957 2 4 2H13C13.5304 2 14.0391 2.21071 14.4142 2.58579C14.7893 2.96086 15 3.46957 15 4V5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        """
+
+        svg_paste = """
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 4H8V6H16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6H5C3.89543 6 3 6.89543 3 8V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V8C21 6.89543 20.1046 6 19 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        """
+
+        # Using stroke="currentColor" so we just need to replace that string for color if desired, 
+        # but create_svg_icon replaces 'fill="currentColor"'.
+        # Let's adjust create_svg_icon to handle stroke or just act on the whole string replacement.
+        # Actually create_svg_icon as written only does: .replace('fill="currentColor"', ...)
+        # So I will pre-tint these strings or pass stroke="color" in the svg itself? 
+        # Easier: Modify create_svg_icon to also replace stroke="currentColor", OR just hardcode the color white for now in the SVG string if current helper is too simple.
+        # But for best practice with the helper I made:
+        # I'll update the SVGs to use specific color (white) or update the helper. 
+        # Let's assume the user wants the standard white icon first. 
+        # The helper I wrote in previous step: svg_string.replace('fill="currentColor"', f'fill="{color_hex}"')
+        # These SVGs use STROKE.
+        # Quick Fix: I will just use `stroke="#ffffff"` directly in the SVG definitions below to ensure they show up white.
+        
+        svg_save = svg_save.replace('stroke="currentColor"', 'stroke="#ffffff"')
+        svg_copy = svg_copy.replace('stroke="currentColor"', 'stroke="#ffffff"')
+        svg_paste = svg_paste.replace('stroke="currentColor"', 'stroke="#ffffff"')
+
+        icon_save = create_svg_icon(svg_save, 24, 24)
+        icon_copy = create_svg_icon(svg_copy, 24, 24)
+        icon_paste = create_svg_icon(svg_paste, 24, 24)
 
         self.save_btn = QtWidgets.QPushButton(" Save")
         self.save_btn.setIcon(icon_save)

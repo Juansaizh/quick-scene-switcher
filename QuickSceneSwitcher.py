@@ -90,7 +90,7 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
         is_marked_cyan = index.data(QtCore.Qt.UserRole + 2)
         if is_marked_cyan:
             center_x_cyan = base_right - (self.strip_width / 2)
-            painter.setBrush(QtGui.QBrush(QtGui.QColor("#47c0c0")))
+            painter.setBrush(QtGui.QBrush(QtGui.QColor("#0290ff")))
             painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
 
         # 3. Check if marked GREEN (UserRole + 3) - Left of Cyan (with spacing)
@@ -252,7 +252,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 height: 6px;
                 border-radius: 8px;
                 background-color: #474747;
-                border: 5px solid #47c0c0;
+                border: 5px solid #0290ff;
             }
         """)
         

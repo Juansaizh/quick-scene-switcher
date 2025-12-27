@@ -629,7 +629,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             border-color: #888;
         }
         QPushButton:pressed {
-            background-color: #505050;
+            background-color: #496a93;
         }
         QListWidget {
             border: 1px solid #383838;
@@ -687,6 +687,10 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         QPushButton:hover {
              background-color: #383838;
              border: 1px solid #383838;
+        }
+        QPushButton:pressed {
+            background-color: #496a93;
+            border: 1px solid #496a93;
         }
         """
         self.copy_btn.setStyleSheet(action_btn_style)
@@ -964,18 +968,22 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             self.save_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #646464;
-                    border: 1px solid #555;
+                    border: 1px solid #44ff44;
                     color: #ffffff;
                 }
                 QPushButton:hover {
                      background-color: #383838;
                      border: 1px solid #44ff44; /* Green Border */
                 }
+                QPushButton:pressed {
+                    background-color: #496a93;
+                    border: 1px solid #44ff44;
+                }
             """)
         else:
             self.save_btn.setText(" Save")
             self.save_btn.setToolTip("Save the current scene (layer) back to its file")
-            # Revert to standard action style (defined in init or elsewhere, but we set it here explicitly to match apply_styles)
+            # Revert to standard action style
             self.save_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #646464;
@@ -985,6 +993,10 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 QPushButton:hover {
                      background-color: #383838;
                      border: 1px solid #383838;
+                }
+                QPushButton:pressed {
+                    background-color: #496a93;
+                    border: 1px solid #496a93;
                 }
             """)
 

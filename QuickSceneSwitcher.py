@@ -109,14 +109,14 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
         # Base right edge for calculations
         base_right = rect.right() - self.right_margin
 
-        # 2. Check if marked YELLOW (UserRole + 2) - Rightmost
-        is_marked_yellow = index.data(QtCore.Qt.UserRole + 2)
-        if is_marked_yellow:
-            center_x_yellow = base_right - (self.strip_width / 2)
+        # 2. Check if marked ORANGE (UserRole + 2) - Rightmost
+        is_marked_orange = index.data(QtCore.Qt.UserRole + 2)
+        if is_marked_orange:
+            center_x_orange = base_right - (self.strip_width / 2)
             painter.setBrush(QtGui.QBrush(QtGui.QColor("#ffb620")))
-            painter.drawEllipse(QtCore.QPointF(center_x_yellow, center_y), radius, radius)
+            painter.drawEllipse(QtCore.QPointF(center_x_orange, center_y), radius, radius)
 
-        # 3. Check if marked CYAN (UserRole + 3) - Left of Yellow (with spacing)
+        # 3. Check if marked CYAN (UserRole + 3) - Left of Orange (with spacing)
         is_marked_cyan = index.data(QtCore.Qt.UserRole + 3)
         if is_marked_cyan:
             # 2nd strip from right + spacing
@@ -143,14 +143,14 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
             
             base_right = rect.right() - self.right_margin
             
-            # Yellow Strip (Rightmost strip area)
+            # Orange Strip (Rightmost strip area)
             # Range: [base_right - strip_width, base_right]
             if click_x > (base_right - self.strip_width) and click_x <= base_right:
                 current_state = index.data(QtCore.Qt.UserRole + 2)
                 model.setData(index, not current_state, QtCore.Qt.UserRole + 2)
                 return True 
             
-            # Cyan Strip (Left of Yellow + Spacing)
+            # Cyan Strip (Left of Orange + Spacing)
             # Range: [base_right - strip_width - spacing - strip_width, base_right - strip_width - spacing]
             cyan_right_edge = base_right - self.strip_width - self.dot_spacing
             cyan_left_edge = cyan_right_edge - self.strip_width
@@ -189,7 +189,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 rt.execute('global QSS_IsActive = true')
                 rt.execute('global QSS_ActiveScenePath = ""')
                 rt.execute('global QSS_ActiveLayerName = ""')
-                rt.execute('global QSS_YellowMarkedScenes = #()')
+                rt.execute('global QSS_OrangeMarkedScenes = #()')
             except:
                 pass
 
@@ -236,7 +236,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         <path d="M2.20164 18.4693V7.26388C2.20164 6.30238 2.20164 5.82163 2.39535 5.45665C2.56453 5.13783 2.82521 4.88725 3.15574 4.72408C3.53413 4.53723 4.03254 4.53723 5.02936 4.53723H7.8156C8.59979 4.53723 8.99188 4.53723 9.35032 4.63665C9.66752 4.72462 9.96205 4.87817 10.2195 5.08988C10.5105 5.3292 10.7208 5.6446 11.1415 6.27541L11.5947 6.95509C12.0153 7.5859 12.2257 7.9013 12.5167 8.14062C12.7741 8.35233 13.0686 8.50588 13.3858 8.59385C13.7443 8.69327 14.1364 8.69327 14.9205 8.69327H18.9739C19.9707 8.69327 20.4691 8.69327 20.8475 8.88012C21.178 9.04329 21.4387 9.29387 21.6079 9.61269C21.8016 9.97767 21.8016 10.4584 21.8016 11.4199V18.4693C21.8016 19.4308 21.8016 19.9115 21.6079 20.2765C21.4387 20.5953 21.178 20.8459 20.8475 21.0091C20.4691 21.1959 19.9707 21.1959 18.9739 21.1959H5.02936C4.03254 21.1959 3.53413 21.1959 3.15574 21.0091C2.82521 20.8459 2.56453 20.5953 2.39535 20.2765C2.20164 19.9115 2.20164 19.4308 2.20164 18.4693Z" fill="currentColor"/>
         </svg>
         """
-        icon_dir = create_svg_icon(svg_folder, 24, 24, "#ffb620") # Example with orange/yellow tint
+        icon_dir = create_svg_icon(svg_folder, 24, 24, "#ffb620") # Example with orange tint
         
         self.browse_btn.setIcon(icon_dir)
         self.browse_btn.setFixedSize(30, 30)
@@ -273,13 +273,13 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             }
         """)
 
-        self.master_yellow_checkbox = QtWidgets.QCheckBox()
-        self.master_yellow_checkbox.setFixedWidth(20) 
-        self.master_yellow_checkbox.setToolTip("Mark/Unmark All Yellow")
-        self.master_yellow_checkbox.clicked.connect(self.toggle_all_yellow_markers)
+        self.master_orange_checkbox = QtWidgets.QCheckBox()
+        self.master_orange_checkbox.setFixedWidth(20) 
+        self.master_orange_checkbox.setToolTip("Mark/Unmark All Orange")
+        self.master_orange_checkbox.clicked.connect(self.toggle_all_orange_markers)
         
-        # Yellow Checkbox Style
-        self.master_yellow_checkbox.setStyleSheet("""
+        # Orange Checkbox Style
+        self.master_orange_checkbox.setStyleSheet("""
             QCheckBox::indicator:checked {
                 width: 6px;
                 height: 6px;
@@ -293,7 +293,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         header_layout.addWidget(self.folder_name_label)
         header_layout.addStretch()
         header_layout.addWidget(self.master_cyan_checkbox)
-        header_layout.addWidget(self.master_yellow_checkbox)
+        header_layout.addWidget(self.master_orange_checkbox)
         
         # Add a small margin to right to align better with list scrollbar/content
         # Increased margin to match SceneDelegate right_margin (10) + scrollbar visual compensation
@@ -304,9 +304,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.scene_list = QtWidgets.QListWidget()
         self.scene_list.setAlternatingRowColors(True)
         self.scene_list.itemDoubleClicked.connect(self.switch_to_scene_layer)
-        # Connect dataChanged to check for cyan markers AND update Yellow global
+        # Connect dataChanged to check for cyan markers AND update Orange global
         self.scene_list.model().dataChanged.connect(self.check_cyan_markers_state)
-        self.scene_list.model().dataChanged.connect(self.update_yellow_global_variable)
+        self.scene_list.model().dataChanged.connect(self.update_orange_global_variable)
         self.scene_list.model().dataChanged.connect(self.update_master_checkboxes_state)
         
         # Set Custom Delegate
@@ -401,9 +401,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
 
-    def toggle_all_yellow_markers(self):
-        """Toggles the marked state for all items based on master checkbox (YELLOW)."""
-        state = self.master_yellow_checkbox.isChecked()
+    def toggle_all_orange_markers(self):
+        """Toggles the marked state for all items based on master checkbox (ORANGE)."""
+        state = self.master_orange_checkbox.isChecked()
         
         # Block signals to prevent massive dataChanged spam
         self.scene_list.model().blockSignals(True)
@@ -415,7 +415,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             self.scene_list.model().blockSignals(False)
         
         self.scene_list.viewport().update()
-        self.update_yellow_global_variable() # Update global immediately
+        self.update_orange_global_variable() # Update global immediately
 
     def toggle_all_cyan_markers(self):
         """Toggles the marked state for all items based on master checkbox (CYAN)."""
@@ -433,10 +433,10 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.scene_list.viewport().update()
         self.check_cyan_markers_state() # Update UI immediately
 
-    def update_yellow_global_variable(self):
+    def update_orange_global_variable(self):
         """
-        Updates the global MaxScript variable `QSS_YellowMarkedScenes` 
-        with the currently marked Yellow scenes (LayerName, Path).
+        Updates the global MaxScript variable `QSS_OrangeMarkedScenes` 
+        with the currently marked Orange scenes (LayerName, Path).
         Format: #(#("Layer", "Path"), ...)
         """
         if not MAX_AVAILABLE:
@@ -445,7 +445,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         marked_data = []
         for i in range(self.scene_list.count()):
             item = self.scene_list.item(i)
-            # Check Yellow Marker (UserRole + 2)
+            # Check Orange Marker (UserRole + 2)
             if item.data(QtCore.Qt.UserRole + 2):
                 layer_name = item.data(QtCore.Qt.UserRole + 1)
                 full_path = item.data(QtCore.Qt.UserRole)
@@ -461,9 +461,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             mxs_array_str = "#()"
             
         try:
-            rt.execute(f'global QSS_YellowMarkedScenes = {mxs_array_str}')
+            rt.execute(f'global QSS_OrangeMarkedScenes = {mxs_array_str}')
         except Exception as e:
-            print(f"Error updating global QSS_YellowMarkedScenes: {e}")
+            print(f"Error updating global QSS_OrangeMarkedScenes: {e}")
 
     def check_modifications(self):
         """Wrapper to check both internal dirty state and external file changes."""
@@ -820,7 +820,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             rt.setSaveRequired(False)
             
         # Reset Master Checkboxes
-        self.master_yellow_checkbox.setChecked(False)
+        self.master_orange_checkbox.setChecked(False)
         self.master_cyan_checkbox.setChecked(False)
         # Force UI update for button state (will be "Save" since list is cleared below)
         self.check_cyan_markers_state() 
@@ -1083,28 +1083,28 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         count = self.scene_list.count()
         if count == 0:
             self.master_cyan_checkbox.setChecked(False)
-            self.master_yellow_checkbox.setChecked(False)
+            self.master_orange_checkbox.setChecked(False)
             return
 
-        all_yellow = True
+        all_orange = True
         all_cyan = True
 
         for i in range(count):
             item = self.scene_list.item(i)
-            # Check Yellow (UserRole + 2)
+            # Check Orange (UserRole + 2)
             if not item.data(QtCore.Qt.UserRole + 2):
-                all_yellow = False
+                all_orange = False
             
             # Check Cyan (UserRole + 3)
             if not item.data(QtCore.Qt.UserRole + 3):
                 all_cyan = False
 
-            if not all_yellow and not all_cyan:
+            if not all_orange and not all_cyan:
                 break
 
         # Update Master Safe (we connect to clicked, so setChecked doesn't trigger loop)
         self.master_cyan_checkbox.setChecked(all_cyan)
-        self.master_yellow_checkbox.setChecked(all_yellow)
+        self.master_orange_checkbox.setChecked(all_orange)
 
     def action_save_wrapper(self):
         """Decides whether to do a single save or batch save."""

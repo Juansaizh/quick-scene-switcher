@@ -1134,7 +1134,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         # Confirmation Dialog
         count = len(items_to_save)
         confirm_msg = QtWidgets.QMessageBox(self)
-        confirm_msg.setWindowTitle("Batch Save Confirmation")
+        confirm_msg.setWindowTitle("Quick Scene Switcher")
         confirm_msg.setText(f"You are about to save {count} scenes.\n\nDo you want to continue?")
         
         btn_continue = confirm_msg.addButton("Save Scenes", QtWidgets.QMessageBox.AcceptRole)

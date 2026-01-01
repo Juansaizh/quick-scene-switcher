@@ -113,7 +113,7 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
         is_marked_orange = index.data(QtCore.Qt.UserRole + 2)
         if is_marked_orange:
             center_x_orange = base_right - (self.strip_width / 2)
-            painter.setBrush(QtGui.QBrush(QtGui.QColor("#ffb620")))
+            painter.setBrush(QtGui.QBrush(QtGui.QColor("#ff736a")))
             painter.drawEllipse(QtCore.QPointF(center_x_orange, center_y), radius, radius)
 
         # 3. Check if marked CYAN (UserRole + 3) - Left of Orange (with spacing)
@@ -121,7 +121,7 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
         if is_marked_cyan:
             # 2nd strip from right + spacing
             center_x_cyan = base_right - self.strip_width - self.dot_spacing - (self.strip_width / 2)
-            painter.setBrush(QtGui.QBrush(QtGui.QColor("#47c0c0")))
+            painter.setBrush(QtGui.QBrush(QtGui.QColor("#4fdc45")))
             painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
 
         # 4. Check if EXTERNAL CHANGE DETECTED (UserRole + 4) - Left of Cyan (with spacing)
@@ -236,7 +236,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         <path d="M2.20164 18.4693V7.26388C2.20164 6.30238 2.20164 5.82163 2.39535 5.45665C2.56453 5.13783 2.82521 4.88725 3.15574 4.72408C3.53413 4.53723 4.03254 4.53723 5.02936 4.53723H7.8156C8.59979 4.53723 8.99188 4.53723 9.35032 4.63665C9.66752 4.72462 9.96205 4.87817 10.2195 5.08988C10.5105 5.3292 10.7208 5.6446 11.1415 6.27541L11.5947 6.95509C12.0153 7.5859 12.2257 7.9013 12.5167 8.14062C12.7741 8.35233 13.0686 8.50588 13.3858 8.59385C13.7443 8.69327 14.1364 8.69327 14.9205 8.69327H18.9739C19.9707 8.69327 20.4691 8.69327 20.8475 8.88012C21.178 9.04329 21.4387 9.29387 21.6079 9.61269C21.8016 9.97767 21.8016 10.4584 21.8016 11.4199V18.4693C21.8016 19.4308 21.8016 19.9115 21.6079 20.2765C21.4387 20.5953 21.178 20.8459 20.8475 21.0091C20.4691 21.1959 19.9707 21.1959 18.9739 21.1959H5.02936C4.03254 21.1959 3.53413 21.1959 3.15574 21.0091C2.82521 20.8459 2.56453 20.5953 2.39535 20.2765C2.20164 19.9115 2.20164 19.4308 2.20164 18.4693Z" fill="currentColor"/>
         </svg>
         """
-        icon_dir = create_svg_icon(svg_folder, 24, 24, "#ffb620") # Example with orange tint
+        icon_dir = create_svg_icon(svg_folder, 24, 24, "#ffffff") # Example with orange tint
         
         self.browse_btn.setIcon(icon_dir)
         self.browse_btn.setFixedSize(30, 30)
@@ -269,7 +269,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 height: 6px;
                 border-radius: 8px;
                 background-color: #474747;
-                border: 5px solid #47c0c0;
+                border: 5px solid #4fdc45;
             }
         """)
 
@@ -285,7 +285,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 height: 6px;
                 border-radius: 8px;
                 background-color: #474747;
-                border: 5px solid #ffb620;
+                border: 5px solid #ff736a;
             }
         """)
         
@@ -1041,16 +1041,16 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             self.save_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #646464;
-                    border: 1px solid #47c0c0;
+                    border: 1px solid #4fdc45;
                     color: #ffffff;
                 }
                 QPushButton:hover {
-                     background-color: #47c0c0;
-                     border: 1px solid #47c0c0; /* Cyan Border */
+                     background-color: #4fdc45;
+                     border: 1px solid #4fdc45; /* Cyan Border */
                 }
                 QPushButton:pressed {
                     background-color: #559191;
-                    border: 1px solid #47c0c0;
+                    border: 1px solid #4fdc45;
                 }
             """)
         else:

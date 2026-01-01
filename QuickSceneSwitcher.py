@@ -23,12 +23,8 @@ import os
 import uuid
 from PySide2 import QtWidgets, QtGui, QtCore, QtSvg
 
-try:
-    import pymxs
-    rt = pymxs.runtime
-    MAX_AVAILABLE = True
-except ImportError:
-    MAX_AVAILABLE = False
+import pymxs
+rt = pymxs.runtime
 
 try:
     import qtmax
@@ -165,7 +161,7 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
 
 class SceneSwitcherUI(QtWidgets.QDockWidget):
     def __init__(self, parent=None):
-        if MAX_AVAILABLE and parent is None:
+        if parent is None:
             parent = QtWidgets.QWidget.find(rt.windows.getMAXHWND())
         super().__init__(parent)
 
@@ -183,25 +179,23 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.init_ui()
         self.apply_styles()
 
-        if MAX_AVAILABLE:
-            try:
-                # Initialize global variables
-                rt.execute('global QSS_IsActive = true')
-                rt.execute('global QSS_ActiveScenePath = ""')
-                rt.execute('global QSS_ActiveLayerName = ""')
-                rt.execute('global QSS_OrangeMarkedScenes = #()')
-            except:
-                pass
+        try:
+            # Initialize global variables
+            rt.execute('global QSS_IsActive = true')
+            rt.execute('global QSS_ActiveScenePath = ""')
+            rt.execute('global QSS_ActiveLayerName = ""')
+            rt.execute('global QSS_OrangeMarkedScenes = #()')
+        except:
+            pass
 
     def closeEvent(self, event):
         if hasattr(self, 'dirty_timer'):
             self.dirty_timer.stop()
         
-        if MAX_AVAILABLE:
-            try:
-                rt.execute('global QSS_IsActive = false')
-            except:
-                pass
+        try:
+            rt.execute('global QSS_IsActive = false')
+        except:
+            pass
                 
         event.accept()
 
@@ -439,8 +433,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         with the currently marked Orange scenes (LayerName, Path).
         Format: #(#("Layer", "Path"), ...)
         """
-        if not MAX_AVAILABLE:
-            return
+
 
         marked_data = []
         for i in range(self.scene_list.count()):
@@ -572,8 +565,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         display_name = item.data(QtCore.Qt.UserRole + 1)
         index = self.scene_list.row(item)
 
-        if MAX_AVAILABLE:
-            rt.disableRefMsgs()
+        rt.disableRefMsgs()
 
             try:
                 root_layer = rt.LayerManager.getLayerFromName(display_name)
@@ -627,10 +619,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                 rt.enableRefMsgs()
                 rt.redrawViews()
 
-        else:
-             try:
-                self.file_timestamps[full_path] = os.path.getmtime(full_path)
-             except: pass
+
         
         # Only restart timer if we are reloading the active scene or finished a batch
         if item == self.active_scene_item:
@@ -648,11 +637,10 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             return
 
         is_dirty = False
-        if MAX_AVAILABLE:
-            try:
-                is_dirty = rt.getSaveRequired()
-            except:
-                return
+        try:
+            is_dirty = rt.getSaveRequired()
+        except:
+            return
 
         if is_dirty != self.is_ui_dirty:
             self.set_item_dirty(self.active_scene_item, is_dirty)
@@ -815,9 +803,8 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             self.dirty_timer.start(500)
             return
 
-        if MAX_AVAILABLE:
-            rt.resetMaxFile(quiet=True)
-            rt.setSaveRequired(False)
+        rt.resetMaxFile(quiet=True)
+        rt.setSaveRequired(False)
             
         # Reset Master Checkboxes
         self.master_orange_checkbox.setChecked(False)
@@ -833,17 +820,16 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         for index, full_path in enumerate(max_files):
              self.import_single_scene(full_path, index, is_reload=False)
 
-        if MAX_AVAILABLE:
-            rt.clearSelection()
-            rt.redrawViews()
-            self.clean_up_material_names()
-            
-            # Activate the first scene by default so the active layer is correct
-            if self.scene_list.count() > 0:
-                first_item = self.scene_list.item(0)
-                self.scene_list.setCurrentItem(first_item)
-                # Use _perform_scene_switch to skip dirty checks (we just loaded)
-                self._perform_scene_switch(first_item)
+        rt.clearSelection()
+        rt.redrawViews()
+        self.clean_up_material_names()
+        
+        # Activate the first scene by default so the active layer is correct
+        if self.scene_list.count() > 0:
+            first_item = self.scene_list.item(0)
+            self.scene_list.setCurrentItem(first_item)
+            # Use _perform_scene_switch to skip dirty checks (we just loaded)
+            self._perform_scene_switch(first_item)
 
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 
@@ -854,8 +840,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         """
         Removes the .Duplicate.HASH suffix from all materials in the scene.
         """
-        if not MAX_AVAILABLE:
-            return
+
 
         duplicates_cleaned = 0
         # Iterate over all scene materials
@@ -1011,17 +996,17 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             item.setData(QtCore.Qt.UserRole + 1, display_name)
             self.scene_list.addItem(item)
 
+            # Activate the first scene by default so the active layer is correct
             if index == 0:
                 self.active_scene_item = item
                 self.highlight_item(item, True)
                 # Initialize globals for the first item
-                if MAX_AVAILABLE:
-                    try:
-                        safe_path = full_path.replace("\\", "\\\\")
-                        rt.execute(f'QSS_ActiveScenePath = @"{safe_path}"')
-                        rt.execute(f'QSS_ActiveLayerName = @"{display_name}"')
-                    except:
-                        pass
+                try:
+                    safe_path = full_path.replace("\\", "\\\\")
+                    rt.execute(f'QSS_ActiveScenePath = @"{safe_path}"')
+                    rt.execute(f'QSS_ActiveLayerName = @"{display_name}"')
+                except:
+                    pass
             else:
                 self.highlight_item(item, False)
 
@@ -1244,37 +1229,35 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         tgt_layer_name = item.data(QtCore.Qt.UserRole + 1)
         self.active_scene_item = item
 
-        if MAX_AVAILABLE:
-            rt.clearSelection()
-            count = self.scene_list.count()
-            for i in range(count):
-                list_item = self.scene_list.item(i)
-                layer_name = list_item.data(QtCore.Qt.UserRole + 1)
+        rt.clearSelection()
+        count = self.scene_list.count()
+        for i in range(count):
+            list_item = self.scene_list.item(i)
+            layer_name = list_item.data(QtCore.Qt.UserRole + 1)
 
-                layer = rt.LayerManager.getLayerFromName(layer_name)
-                if layer:
-                    if layer_name == tgt_layer_name:
-                        layer.on = True
-                        layer.current = True
-                    else:
-                        layer.on = False
+            layer = rt.LayerManager.getLayerFromName(layer_name)
+            if layer:
+                if layer_name == tgt_layer_name:
+                    layer.on = True
+                    layer.current = True
+                else:
+                    layer.on = False
 
-            rt.redrawViews()
+        rt.redrawViews()
 
-            for i in range(self.scene_list.count()):
-                 self.set_item_dirty(self.scene_list.item(i), False)
+        for i in range(self.scene_list.count()):
+                self.set_item_dirty(self.scene_list.item(i), False)
 
         self.update_list_highlights()
 
-        if MAX_AVAILABLE:
-            try:
-                full_path = self.active_scene_item.data(QtCore.Qt.UserRole)
-                safe_path = full_path.replace("\\", "\\\\")
-                # display_name is already in tgt_layer_name
-                rt.execute(f'QSS_ActiveScenePath = @"{safe_path}"')
-                rt.execute(f'QSS_ActiveLayerName = @"{tgt_layer_name}"')
-            except:
-                pass
+        try:
+            full_path = self.active_scene_item.data(QtCore.Qt.UserRole)
+            safe_path = full_path.replace("\\", "\\\\")
+            # display_name is already in tgt_layer_name
+            rt.execute(f'QSS_ActiveScenePath = @"{safe_path}"')
+            rt.execute(f'QSS_ActiveLayerName = @"{tgt_layer_name}"')
+        except:
+            pass
 
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 
@@ -1288,25 +1271,24 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
                                   limpiar flags persistentes tras modificaciones reales.
                                   Si False, usa un reset ligero (setSaveRequired) para switches rápidos.
         """
-        if MAX_AVAILABLE:
-            try:
-                should_save_temp = use_temp_save
-                if hasattr(self, 'disable_detection_cb') and self.disable_detection_cb.isChecked():
-                    should_save_temp = False
+        try:
+            should_save_temp = use_temp_save
+            if hasattr(self, 'disable_detection_cb') and self.disable_detection_cb.isChecked():
+                should_save_temp = False
 
-                if should_save_temp:
-                    temp_dir = rt.getdir(rt.name("temp"))
-                    temp_file = os.path.join(temp_dir, "SceneSwitcher_Master_Reset.max")
-                    rt.saveMaxFile(temp_file, quiet=True)
+            if should_save_temp:
+                temp_dir = rt.getdir(rt.name("temp"))
+                temp_file = os.path.join(temp_dir, "SceneSwitcher_Master_Reset.max")
+                rt.saveMaxFile(temp_file, quiet=True)
 
-                rt.setSaveRequired(False)
+            rt.setSaveRequired(False)
 
-                if self.active_scene_item:
-                    self.set_item_dirty(self.active_scene_item, False)
-                self.is_ui_dirty = False
+            if self.active_scene_item:
+                self.set_item_dirty(self.active_scene_item, False)
+            self.is_ui_dirty = False
 
-            except Exception as e:
-                pass
+        except Exception as e:
+            pass
 
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
@@ -1343,7 +1325,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if hasattr(self, 'disable_detection_cb') and self.disable_detection_cb.isChecked():
              return True
 
-        if MAX_AVAILABLE and rt.getSaveRequired():
+        if rt.getSaveRequired():
             active_path = self.active_scene_item.data(QtCore.Qt.UserRole)
 
             msg_text = (f"Do you want to save the changes you made in the scene:\n\n"
@@ -1427,131 +1409,130 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         save_success = False
 
-        if MAX_AVAILABLE:
-            user_selection = list(rt.selection)
-            selection_was_empty = (len(user_selection) == 0)
+        user_selection = list(rt.selection)
+        selection_was_empty = (len(user_selection) == 0)
 
-            root_layer = rt.LayerManager.getLayerFromName(layer_name)
-            if not root_layer:
-                QtWidgets.QMessageBox.warning(self, "Error", f"Root Layer '{layer_name}' not found!")
-                self.dirty_timer.start(500)
-                return False
+        root_layer = rt.LayerManager.getLayerFromName(layer_name)
+        if not root_layer:
+            QtWidgets.QMessageBox.warning(self, "Error", f"Root Layer '{layer_name}' not found!")
+            self.dirty_timer.start(500)
+            return False
 
-            all_layers_cache = []
-            for i in range(rt.LayerManager.count):
-                all_layers_cache.append(rt.LayerManager.getLayer(i))
+        all_layers_cache = []
+        for i in range(rt.LayerManager.count):
+            all_layers_cache.append(rt.LayerManager.getLayer(i))
 
-            state_map = {}
+        state_map = {}
 
-            def get_children_from_cache(parent_name):
-                children = []
-                for lyr in all_layers_cache:
-                    p = lyr.getParent()
-                    if p and p.name == parent_name:
-                         children.append(lyr)
-                return children
+        def get_children_from_cache(parent_name):
+            children = []
+            for lyr in all_layers_cache:
+                p = lyr.getParent()
+                if p and p.name == parent_name:
+                        children.append(lyr)
+            return children
 
-            def collect_descendants_recursive(parent_lyr):
-                desc_list = []
-                direct_children = get_children_from_cache(parent_lyr.name)
-                for child in direct_children:
-                    desc_list.append(child)
-                    desc_list.extend(collect_descendants_recursive(child))
-                return desc_list
+        def collect_descendants_recursive(parent_lyr):
+            desc_list = []
+            direct_children = get_children_from_cache(parent_lyr.name)
+            for child in direct_children:
+                desc_list.append(child)
+                desc_list.extend(collect_descendants_recursive(child))
+            return desc_list
 
-            descendants = collect_descendants_recursive(root_layer)
+        descendants = collect_descendants_recursive(root_layer)
 
-            valid_layer_names = set()
-            valid_layer_names.add(root_layer.name)
-            for l in descendants:
-                valid_layer_names.add(l.name)
+        valid_layer_names = set()
+        valid_layer_names.add(root_layer.name)
+        for l in descendants:
+            valid_layer_names.add(l.name)
 
-            nodes_to_save = []
+        nodes_to_save = []
 
-            for obj in rt.objects:
-                if obj.layer.name in valid_layer_names:
-                    nodes_to_save.append(obj)
+        for obj in rt.objects:
+            if obj.layer.name in valid_layer_names:
+                nodes_to_save.append(obj)
 
-            layer0_sub_name = f"0{suffix}"
-            moved_nodes_restore_map = {}
+        layer0_sub_name = f"0{suffix}"
+        moved_nodes_restore_map = {}
 
-            global_layer_0 = rt.LayerManager.getLayer(0)
+        global_layer_0 = rt.LayerManager.getLayer(0)
 
-            for obj in nodes_to_save:
-                current_layer_name = obj.layer.name
+        for obj in nodes_to_save:
+            current_layer_name = obj.layer.name
 
-                if current_layer_name == layer0_sub_name:
+            if current_layer_name == layer0_sub_name:
+                moved_nodes_restore_map[obj] = obj.layer
+
+            elif current_layer_name == layer_name:
                     moved_nodes_restore_map[obj] = obj.layer
 
-                elif current_layer_name == layer_name:
-                     moved_nodes_restore_map[obj] = obj.layer
+        if moved_nodes_restore_map:
+            for obj in moved_nodes_restore_map.keys():
+                global_layer_0.addNode(obj)
 
-            if moved_nodes_restore_map:
-                for obj in moved_nodes_restore_map.keys():
-                    global_layer_0.addNode(obj)
+        for layer in descendants:
+            original_name = layer.name
+            original_parent = layer.getParent()
 
-            for layer in descendants:
-                original_name = layer.name
-                original_parent = layer.getParent()
+            state_map[layer] = {'name': original_name, 'parent': original_parent}
 
-                state_map[layer] = {'name': original_name, 'parent': original_parent}
+            if original_name.endswith(suffix):
+                clean_name = original_name[:-len(suffix)]
 
-                if original_name.endswith(suffix):
-                    clean_name = original_name[:-len(suffix)]
+                if clean_name == "0":
+                    continue
 
-                    if clean_name == "0":
-                        continue
-
-                    try:
-                        layer.setName(clean_name)
-                    except:
-                        pass
-
-                if original_parent and original_parent.name == root_layer.name:
-                    try:
-                        layer.setParent(rt.undefined)
-                    except:
-                        pass
-
-            rt.clearSelection()
-
-            if nodes_to_save:
                 try:
-                    rt.select(nodes_to_save)
-                except Exception as e:
+                    layer.setName(clean_name)
+                except:
                     pass
 
-            final_selection = rt.selection
-            count_sel = final_selection.count
-
-            if count_sel > 0:
-                result = rt.saveNodes(final_selection, target_file, quiet=True)
-                save_success = True
-
-            for layer, state in state_map.items():
+            if original_parent and original_parent.name == root_layer.name:
                 try:
-                    if state['parent']:
-                        layer.setParent(state['parent'])
-
-                    if layer.name != state['name']:
-                        layer.setName(state['name'])
-                except Exception as e:
+                    layer.setParent(rt.undefined)
+                except:
                     pass
 
-            for obj, original_layer in moved_nodes_restore_map.items():
-                try:
-                    original_layer.addNode(obj)
-                except Exception as e:
-                    pass
+        rt.clearSelection()
 
-            rt.clearSelection()
-            if not selection_was_empty:
-                try:
-                    rt.select(user_selection)
-                except: pass
+        if nodes_to_save:
+            try:
+                rt.select(nodes_to_save)
+            except Exception as e:
+                pass
 
-            rt.enableRefMsgs()
-            rt.redrawViews()
+        final_selection = rt.selection
+        count_sel = final_selection.count
+
+        if count_sel > 0:
+            result = rt.saveNodes(final_selection, target_file, quiet=True)
+            save_success = True
+
+        for layer, state in state_map.items():
+            try:
+                if state['parent']:
+                    layer.setParent(state['parent'])
+
+                if layer.name != state['name']:
+                    layer.setName(state['name'])
+            except Exception as e:
+                pass
+
+        for obj, original_layer in moved_nodes_restore_map.items():
+            try:
+                original_layer.addNode(obj)
+            except Exception as e:
+                pass
+
+        rt.clearSelection()
+        if not selection_was_empty:
+            try:
+                rt.select(user_selection)
+            except: pass
+
+        rt.enableRefMsgs()
+        rt.redrawViews()
 
         if save_success:
             try:
@@ -1566,18 +1547,16 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
     def action_copy(self):
         """Stores the current selection in a global MaxScript variable (In-Memory)."""
-        if MAX_AVAILABLE:
-            selection = rt.selection
-            if selection.count > 0:
-                # Store actual node references
-                rt.execute("global QSS_ClipboardNodes = for o in selection collect o")
-            else:
-                rt.execute("global QSS_ClipboardNodes = undefined")
+        selection = rt.selection
+        if selection.count > 0:
+            # Store actual node references
+            rt.execute("global QSS_ClipboardNodes = for o in selection collect o")
+        else:
+            rt.execute("global QSS_ClipboardNodes = undefined")
 
     def action_paste(self):
         """Clones nodes from the global clipboard to the ACTIVE layer."""
-        if MAX_AVAILABLE:
-            # Check if we have valid nodes to paste
+        # Check if we have valid nodes to paste
             try:
                 # 1. Cleanup clipboard (remove deleted nodes)
                 rt.execute("""
@@ -1638,19 +1617,10 @@ def run_max_ui():
             return
 
     dock = SceneSwitcherUI()
-    if MAX_AVAILABLE:
-        dock.setFloating(True)
-        dock.show()
-    else:
-        dock.show()
+    dock.setFloating(True)
+    dock.show()
 
     return dock
 
 if __name__ == "__main__":
-    if MAX_AVAILABLE:
-        _scene_switcher_ui_ref = run_max_ui()
-    else:
-        app = QtWidgets.QApplication(sys.argv)
-        dialog = SceneSwitcherUI()
-        dialog.show()
-        sys.exit(app.exec_())
+    _scene_switcher_ui_ref = run_max_ui()

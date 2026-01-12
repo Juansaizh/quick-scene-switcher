@@ -567,57 +567,57 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         rt.disableRefMsgs()
 
-            try:
-                root_layer = rt.LayerManager.getLayerFromName(display_name)
+        try:
+            root_layer = rt.LayerManager.getLayerFromName(display_name)
 
-                if root_layer:
-                    all_layers_cache = []
-                    for i in range(rt.LayerManager.count):
-                        all_layers_cache.append(rt.LayerManager.getLayer(i))
+            if root_layer:
+                all_layers_cache = []
+                for i in range(rt.LayerManager.count):
+                    all_layers_cache.append(rt.LayerManager.getLayer(i))
 
-                    def get_children(parent_name):
-                        children = []
-                        for lyr in all_layers_cache:
-                            p = lyr.getParent()
-                            if p and p.name == parent_name:
-                                children.append(lyr)
-                        return children
+                def get_children(parent_name):
+                    children = []
+                    for lyr in all_layers_cache:
+                        p = lyr.getParent()
+                        if p and p.name == parent_name:
+                            children.append(lyr)
+                    return children
 
-                    def collect_layers_recursive(parent_lyr):
-                        desc = [parent_lyr]
-                        subdir = get_children(parent_lyr.name)
-                        for child in subdir:
-                            desc.extend(collect_layers_recursive(child))
-                        return desc
+                def collect_layers_recursive(parent_lyr):
+                    desc = [parent_lyr]
+                    subdir = get_children(parent_lyr.name)
+                    for child in subdir:
+                        desc.extend(collect_layers_recursive(child))
+                    return desc
 
-                    layers_to_clean = collect_layers_recursive(root_layer)
-                    valid_names = set(l.name for l in layers_to_clean)
+                layers_to_clean = collect_layers_recursive(root_layer)
+                valid_names = set(l.name for l in layers_to_clean)
 
-                    objs_to_delete = []
-                    for obj in rt.objects:
-                        if obj.layer.name in valid_names:
-                            objs_to_delete.append(obj)
+                objs_to_delete = []
+                for obj in rt.objects:
+                    if obj.layer.name in valid_names:
+                        objs_to_delete.append(obj)
 
-                    if objs_to_delete:
-                        rt.delete(objs_to_delete)
+                if objs_to_delete:
+                    rt.delete(objs_to_delete)
 
-                    for lyr in reversed(layers_to_clean):
-                        try:
-                             rt.LayerManager.deleteLayerByName(lyr.name)
-                        except:
-                             pass
+                for lyr in reversed(layers_to_clean):
+                    try:
+                         rt.LayerManager.deleteLayerByName(lyr.name)
+                    except:
+                         pass
 
-                self.import_single_scene(full_path, index, is_reload=True)
-                
-                # Clear external modification flag (White Circle)
-                item.setData(QtCore.Qt.UserRole + 4, False)
+            self.import_single_scene(full_path, index, is_reload=True)
+            
+            # Clear external modification flag (White Circle)
+            item.setData(QtCore.Qt.UserRole + 4, False)
 
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Reload Error", str(e))
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Reload Error", str(e))
 
-            finally:
-                rt.enableRefMsgs()
-                rt.redrawViews()
+        finally:
+            rt.enableRefMsgs()
+            rt.redrawViews()
 
 
         
@@ -876,116 +876,114 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         except:
             pass
 
-        if MAX_AVAILABLE:
-            scene_root_layer = rt.LayerManager.getLayerFromName(display_name)
-            if not scene_root_layer:
-                scene_root_layer = rt.LayerManager.newLayerFromName(display_name)
+        scene_root_layer = rt.LayerManager.getLayerFromName(display_name)
+        if not scene_root_layer:
+            scene_root_layer = rt.LayerManager.newLayerFromName(display_name)
 
-            scene_root_layer.current = True
+        scene_root_layer.current = True
 
-            existing_layer_names = set()
-            for i in range(rt.LayerManager.count):
-                existing_layer_names.add(rt.LayerManager.getLayer(i).name)
+        existing_layer_names = set()
+        for i in range(rt.LayerManager.count):
+            existing_layer_names.add(rt.LayerManager.getLayer(i).name)
 
-            rt.mergeMaxFile(full_path, rt.name("mergeDups"), rt.name("select"), quiet=True)
+        rt.mergeMaxFile(full_path, rt.name("mergeDups"), rt.name("select"), quiet=True)
 
-            # --- UNIQUE MATERIAL RENAMING START ---
-            # To prevent name collisions during subsequent merges, we give unique names
-            # to the materials of the newly merged objects.
-            unique_suffix = self.generate_unique_suffix()
+        # --- UNIQUE MATERIAL RENAMING START ---
+        # To prevent name collisions during subsequent merges, we give unique names
+        # to the materials of the newly merged objects.
+        unique_suffix = self.generate_unique_suffix()
 
-            # Helper to recursively get materials from an object
-            def get_materials_from_nodes(nodes):
-                mats = set()
-                for obj in nodes:
-                    if obj.material:
-                        mats.add(obj.material)
-                return mats
+        # Helper to recursively get materials from an object
+        def get_materials_from_nodes(nodes):
+            mats = set()
+            for obj in nodes:
+                if obj.material:
+                    mats.add(obj.material)
+            return mats
 
-            merged_objects = list(rt.selection)
-            merged_materials = get_materials_from_nodes(merged_objects)
+        merged_objects = list(rt.selection)
+        merged_materials = get_materials_from_nodes(merged_objects)
 
-            for mat in merged_materials:
-                # Append unique suffix
-                # e.g. "Wood" -> "Wood.Duplicate.a1b2c3d4"
-                try:
-                    mat.name = f"{mat.name}{unique_suffix}"
-                except:
-                    pass
-            # --- UNIQUE MATERIAL RENAMING END ---
-
-            suffix = f" ({display_name})"
-
-            objs_on_layer_0 = [x for x in rt.selection if x.layer.name == "0"]
-            if objs_on_layer_0:
-                layer0_name = f"0{suffix}"
-                layer0_scene = rt.LayerManager.getLayerFromName(layer0_name)
-                if not layer0_scene:
-                    layer0_scene = rt.LayerManager.newLayerFromName(layer0_name)
-
-                layer0_scene.setParent(scene_root_layer)
-                for obj in objs_on_layer_0:
-                    layer0_scene.addNode(obj)
-
-            all_layers = []
-            for i in range(rt.LayerManager.count):
-                all_layers.append(rt.LayerManager.getLayer(i))
-
-            new_layers_set = set()
-            created_layer0_name = f"0{suffix}"
-
-            for layer in all_layers:
-                if layer.name == "0" or layer.name == display_name:
-                        continue
-                if layer.name == created_layer0_name:
-                        continue
-
-                if layer.name not in existing_layer_names:
-                        new_layers_set.add(layer)
-
-            for layer in list(new_layers_set):
-                old_name = layer.name
-                new_name = f"{old_name}{suffix}"
-
-                layer.setName(new_name)
-
-                parent = layer.getParent()
-
-                is_nested = False
-                if parent:
-                    if parent in new_layers_set:
-                        is_nested = True
-
-                if not is_nested:
-                    layer.setParent(scene_root_layer)
-
-            for layer_name in existing_layer_names:
-                if layer_name == "0": continue
-
-                objs_in_layer = [x for x in rt.selection if x.layer.name == layer_name]
-                if objs_in_layer:
-                    unique_name = f"{layer_name}{suffix}"
-                    unique_layer = rt.LayerManager.getLayerFromName(unique_name)
-                    if not unique_layer:
-                            unique_layer = rt.LayerManager.newLayerFromName(unique_name)
-                            unique_layer.setParent(scene_root_layer)
-
-                    for obj in objs_in_layer:
-                        unique_layer.addNode(obj)
-
-            if not is_reload:
-                should_be_visible = (index == 0)
-                scene_root_layer.on = should_be_visible
-
-        icon_item = None
-        if MAX_AVAILABLE:
+        for mat in merged_materials:
+            # Append unique suffix
+            # e.g. "Wood" -> "Wood.Duplicate.a1b2c3d4"
             try:
-                max_root = rt.getDir(rt.name("maxroot"))
-                custom_icon_path = os.path.join(max_root, "UI_ln", "IconsDark", "ATS", "ATSScene.ico")
-                if os.path.exists(custom_icon_path):
-                        icon_item = QtGui.QIcon(custom_icon_path)
+                mat.name = f"{mat.name}{unique_suffix}"
             except:
                 pass
+        # --- UNIQUE MATERIAL RENAMING END ---
+
+        suffix = f" ({display_name})"
+
+        objs_on_layer_0 = [x for x in rt.selection if x.layer.name == "0"]
+        if objs_on_layer_0:
+            layer0_name = f"0{suffix}"
+            layer0_scene = rt.LayerManager.getLayerFromName(layer0_name)
+            if not layer0_scene:
+                layer0_scene = rt.LayerManager.newLayerFromName(layer0_name)
+
+            layer0_scene.setParent(scene_root_layer)
+            for obj in objs_on_layer_0:
+                layer0_scene.addNode(obj)
+
+        all_layers = []
+        for i in range(rt.LayerManager.count):
+            all_layers.append(rt.LayerManager.getLayer(i))
+
+        new_layers_set = set()
+        created_layer0_name = f"0{suffix}"
+
+        for layer in all_layers:
+            if layer.name == "0" or layer.name == display_name:
+                    continue
+            if layer.name == created_layer0_name:
+                    continue
+
+            if layer.name not in existing_layer_names:
+                    new_layers_set.add(layer)
+
+        for layer in list(new_layers_set):
+            old_name = layer.name
+            new_name = f"{old_name}{suffix}"
+
+            layer.setName(new_name)
+
+            parent = layer.getParent()
+
+            is_nested = False
+            if parent:
+                if parent in new_layers_set:
+                    is_nested = True
+
+            if not is_nested:
+                layer.setParent(scene_root_layer)
+
+        for layer_name in existing_layer_names:
+            if layer_name == "0": continue
+
+            objs_in_layer = [x for x in rt.selection if x.layer.name == layer_name]
+            if objs_in_layer:
+                unique_name = f"{layer_name}{suffix}"
+                unique_layer = rt.LayerManager.getLayerFromName(unique_name)
+                if not unique_layer:
+                        unique_layer = rt.LayerManager.newLayerFromName(unique_name)
+                        unique_layer.setParent(scene_root_layer)
+
+                for obj in objs_in_layer:
+                    unique_layer.addNode(obj)
+
+        if not is_reload:
+            should_be_visible = (index == 0)
+            scene_root_layer.on = should_be_visible
+
+        icon_item = None
+        try:
+            max_root = rt.getDir(rt.name("maxroot"))
+            custom_icon_path = os.path.join(max_root, "UI_ln", "IconsDark", "ATS", "ATSScene.ico")
+            if os.path.exists(custom_icon_path):
+                    icon_item = QtGui.QIcon(custom_icon_path)
+        except:
+            pass
 
         if not icon_item or icon_item.isNull():
                 icon_item = get_icon("Citras/3dsMax", QtWidgets.QStyle.SP_FileIcon, self.style())
@@ -1305,11 +1303,10 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             return
 
         is_dirty = False
-        if MAX_AVAILABLE:
-            try:
-                is_dirty = rt.getSaveRequired()
-            except:
-                return
+        try:
+            is_dirty = rt.getSaveRequired()
+        except:
+            return
 
         if is_dirty != self.is_ui_dirty:
             self.set_item_dirty(self.active_scene_item, is_dirty)
@@ -1557,53 +1554,53 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
     def action_paste(self):
         """Clones nodes from the global clipboard to the ACTIVE layer."""
         # Check if we have valid nodes to paste
-            try:
-                # 1. Cleanup clipboard (remove deleted nodes)
-                rt.execute("""
-                if QSS_ClipboardNodes != undefined do (
-                    QSS_ClipboardNodes = for o in QSS_ClipboardNodes where isValidNode o collect o
-                )
-                """)
-                
-                clipboard_nodes = rt.QSS_ClipboardNodes
-                if not clipboard_nodes or len(clipboard_nodes) == 0:
-                    return
+        try:
+            # 1. Cleanup clipboard (remove deleted nodes)
+            rt.execute("""
+            if QSS_ClipboardNodes != undefined do (
+                QSS_ClipboardNodes = for o in QSS_ClipboardNodes where isValidNode o collect o
+            )
+            """)
+            
+            clipboard_nodes = rt.QSS_ClipboardNodes
+            if not clipboard_nodes or len(clipboard_nodes) == 0:
+                return
 
-                # 2. Get Active Layer
-                target_layer = None
-                if self.active_scene_item:
-                    layer_name = self.active_scene_item.data(QtCore.Qt.UserRole + 1)
-                    target_layer = rt.LayerManager.getLayerFromName(layer_name)
-                
-                if not target_layer:
-                    target_layer = rt.LayerManager.current
-                
-                # 3. Clone Nodes safely via MaxScript to capture the result 'newNodes'
-                # We use a global var QSS_LastPastedNodes to capture the output
-                rt.execute("""
-                    QSS_LastPastedNodes = #()
-                    maxOps.cloneNodes QSS_ClipboardNodes cloneType:#copy newNodes:&QSS_LastPastedNodes
-                """)
-                
-                pasted_nodes = rt.QSS_LastPastedNodes
+            # 2. Get Active Layer
+            target_layer = None
+            if self.active_scene_item:
+                layer_name = self.active_scene_item.data(QtCore.Qt.UserRole + 1)
+                target_layer = rt.LayerManager.getLayerFromName(layer_name)
+            
+            if not target_layer:
+                target_layer = rt.LayerManager.current
+            
+            # 3. Clone Nodes safely via MaxScript to capture the result 'newNodes'
+            # We use a global var QSS_LastPastedNodes to capture the output
+            rt.execute("""
+                QSS_LastPastedNodes = #()
+                maxOps.cloneNodes QSS_ClipboardNodes cloneType:#copy newNodes:&QSS_LastPastedNodes
+            """)
+            
+            pasted_nodes = rt.QSS_LastPastedNodes
 
-                if pasted_nodes and len(pasted_nodes) > 0:
-                    for i, new_obj in enumerate(pasted_nodes):
-                        # Restore original name
-                        original_obj = clipboard_nodes[i]
-                        try:
-                            new_obj.name = original_obj.name
-                        except: pass
-                        
-                        # Move to target layer
-                        target_layer.addNode(new_obj)
-                        
-                    rt.select(pasted_nodes)
-                    rt.redrawViews()
+            if pasted_nodes and len(pasted_nodes) > 0:
+                for i, new_obj in enumerate(pasted_nodes):
+                    # Restore original name
+                    original_obj = clipboard_nodes[i]
+                    try:
+                        new_obj.name = original_obj.name
+                    except: pass
                     
-            except Exception as e:
-                # print(f"Paste Error: {e}")
-                pass
+                    # Move to target layer
+                    target_layer.addNode(new_obj)
+                    
+                rt.select(pasted_nodes)
+                rt.redrawViews()
+                
+        except Exception as e:
+            # print(f"Paste Error: {e}")
+            pass
 
 def run_max_ui():
     app = QtWidgets.QApplication.instance()

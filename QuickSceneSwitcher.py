@@ -159,6 +159,108 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
         return super().editorEvent(event, model, option, index)
 
 
+class DropListWidget(QtWidgets.QListWidget):
+    """
+    Custom QListWidget that accepts drag-and-drop of .max files and folders
+    from the OS file explorer. Shows a centered overlay label during drag.
+    """
+    files_dropped = QtCore.Signal(list)  # Emits list of valid .max file paths
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+        # --- Overlay label for drag feedback ---
+        self._drop_overlay = QtWidgets.QLabel("Drop .max files here", self)
+        self._drop_overlay.setAlignment(QtCore.Qt.AlignCenter)
+        self._drop_overlay.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self._drop_overlay.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 220);
+                font-size: 16px;
+                font-weight: bold;
+                background-color: rgba(30, 155, 253, 50);
+                border: 2px dashed #1e9bfd;
+                border-radius: 6px;
+            }
+        """)
+        self._drop_overlay.hide()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Keep overlay covering the entire viewport
+        self._drop_overlay.setGeometry(self.viewport().geometry())
+
+    # ------ Drag & Drop events ------
+
+    def _has_valid_urls(self, mime_data):
+        """Returns True if the drag data contains file URLs."""
+        if not mime_data.hasUrls():
+            return False
+        for url in mime_data.urls():
+            if url.isLocalFile():
+                path = url.toLocalFile()
+                if path.lower().endswith(".max") or os.path.isdir(path):
+                    return True
+        return False
+
+    def dragEnterEvent(self, event):
+        if self._has_valid_urls(event.mimeData()):
+            event.acceptProposedAction()
+            self._drop_overlay.setGeometry(self.viewport().geometry())
+            self._drop_overlay.show()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._has_valid_urls(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._drop_overlay.hide()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self._drop_overlay.hide()
+
+        if not event.mimeData().hasUrls():
+            event.ignore()
+            return
+
+        max_files = []
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            path = url.toLocalFile()
+            if os.path.isdir(path):
+                # Scan directory for .max files
+                try:
+                    for f in sorted(os.listdir(path)):
+                        if f.lower().endswith(".max"):
+                            max_files.append(os.path.join(path, f))
+                except Exception:
+                    pass
+            elif path.lower().endswith(".max"):
+                max_files.append(path)
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_files = []
+        for f in max_files:
+            normalized = os.path.normpath(f)
+            if normalized not in seen:
+                seen.add(normalized)
+                unique_files.append(f)
+
+        if unique_files:
+            event.acceptProposedAction()
+            self.files_dropped.emit(unique_files)
+        else:
+            event.ignore()
+
+
 class SceneSwitcherUI(QtWidgets.QDockWidget):
     def __init__(self, parent=None):
         if parent is None:
@@ -295,7 +397,8 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         
         main_layout.addLayout(header_layout)
 
-        self.scene_list = QtWidgets.QListWidget()
+        self.scene_list = DropListWidget(self)
+        self.scene_list.files_dropped.connect(self.handle_dropped_files)
         self.scene_list.setAlternatingRowColors(True)
         self.scene_list.itemDoubleClicked.connect(self.switch_to_scene_layer)
         # Connect dataChanged to check for cyan markers AND update Orange global
@@ -769,6 +872,15 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             self.path_le.setText(folder_path)
 
             self.merge_all_scenes(folder_path, file_list=files)
+
+    def handle_dropped_files(self, file_list):
+        """Handles files dropped onto the list widget from the OS file explorer."""
+        if not file_list:
+            return
+
+        folder_path = os.path.dirname(file_list[0])
+        self.path_le.setText(folder_path)
+        self.merge_all_scenes(folder_path, file_list=file_list)
 
 
     def merge_all_scenes(self, folder_path, file_list=None):

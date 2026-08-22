@@ -373,6 +373,8 @@ def init_maxscript_helpers():
             else if isProperty subMat #color then subMat.color = newCol
             else if isProperty subMat #wireColor then subMat.wireColor = newCol
         ) catch()
+        try ( notifyDependents subMat ) catch()
+        try ( redrawViews() ) catch()
         true
     )
 
@@ -385,6 +387,8 @@ def init_maxscript_helpers():
             mat.materialIDList[i] = ids[i]
             mat.mapEnabled[i] = enableds[i]
         )
+        try ( notifyDependents mat ) catch()
+        try ( redrawViews() ) catch()
         true
     )
 
@@ -1622,6 +1626,20 @@ class MultiMaterialManagerUI(QDialog):
                             except Exception as err:
                                 print("Error updating face IDs on object {}: {}".format(getattr(obj, 'name', 'obj'), err))
 
+            # Force reference pipeline notification and Nitrous viewport redraw
+            try:
+                rt.notifyDependents(mat)
+                scene_objs = self.get_objects_using_material(mat)
+                for obj in scene_objs:
+                    try:
+                        rt.update(obj)
+                        rt.notifyDependents(obj)
+                    except Exception:
+                        pass
+                rt.redrawViews()
+            except Exception:
+                pass
+
             rt.theHold.Accept(action_name)
             if faces_updated_count > 0:
                 self.set_status("● Live Sync: {} ({} faces)".format(action_name, faces_updated_count))
@@ -1768,6 +1786,21 @@ class MultiMaterialManagerUI(QDialog):
                 rt.theHold.Begin()
                 try:
                     rt._jsh_MMM_SetSubMaterialColor(sub_mat, lin_r, lin_g, lin_b)
+                    if self.target_material:
+                        try:
+                            rt.notifyDependents(self.target_material)
+                            for obj in self.get_objects_using_material(self.target_material):
+                                try:
+                                    rt.update(obj)
+                                    rt.notifyDependents(obj)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                    try:
+                        rt.redrawViews()
+                    except Exception:
+                        pass
                     rt.theHold.Accept("Change Material Color")
                     self.set_status("● Live Sync: Color updated")
                     try:

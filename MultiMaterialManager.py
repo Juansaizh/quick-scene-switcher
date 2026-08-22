@@ -644,14 +644,27 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
 
         elif col == 3:
             painter.setFont(QFont("Segoe UI", 9))
+            is_hovered = (hasattr(self.table, '_hover_row') and hasattr(self.table, '_hover_col') and
+                          self.table._hover_row == row and self.table._hover_col == 3 and not self.table._is_dragging)
+
             if slot.get('sub_mat'):
                 sub_text = slot.get('sub_mat_name', 'None')
                 if slot.get('sub_mat_class') and slot['sub_mat_class'] != 'None':
                     sub_text += "  ({})".format(slot['sub_mat_class'])
-                painter.setPen(QPen(QColor(225, 225, 225)))
-                sub_rect = QRect(rect.x() + 9, rect.y(), rect.width() - 18, rect.height())
-                elided_sub = painter.fontMetrics().elidedText(sub_text, Qt.ElideRight, sub_rect.width())
-                painter.drawText(sub_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_sub)
+
+                box_rect = QRect(rect.x() + 3, rect.y() + 2, rect.width() - 6, rect.height() - 4)
+
+                if is_hovered:
+                    painter.setPen(QPen(QColor(98, 98, 98), 1))
+                    painter.setBrush(QBrush(QColor(78, 78, 78)))
+                    painter.drawRoundedRect(box_rect, 4, 4)
+                    painter.setPen(QPen(QColor(255, 255, 255)))
+                else:
+                    painter.setPen(QPen(QColor(225, 225, 225)))
+
+                text_rect = QRect(box_rect.x() + 6, box_rect.y(), box_rect.width() - 12, box_rect.height())
+                elided_sub = painter.fontMetrics().elidedText(sub_text, Qt.ElideRight, text_rect.width())
+                painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_sub)
             else:
                 painter.setPen(QPen(QColor(135, 135, 135)))
                 painter.drawText(rect, Qt.AlignCenter, "None")
@@ -740,6 +753,8 @@ class ReorderableTableWidget(QTableWidget):
         self._drag_start_pos = QPoint()
         self._current_mouse_y = 0
         self._row_height = 31
+        self._hover_row = -1
+        self._hover_col = -1
 
         self._active_anim = {}
         self._row_anim_offsets = {}
@@ -753,6 +768,14 @@ class ReorderableTableWidget(QTableWidget):
         self._scroll_timer.setInterval(140)
         self._scroll_timer.timeout.connect(self._handle_auto_scroll)
         self._scroll_direction = 0
+
+    def leaveEvent(self, event):
+        if self._hover_row != -1 or self._hover_col != -1:
+            self._hover_row = -1
+            self._hover_col = -1
+            self.viewport().update()
+        self.viewport().setCursor(Qt.ArrowCursor)
+        super(ReorderableTableWidget, self).leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -773,7 +796,7 @@ class ReorderableTableWidget(QTableWidget):
                 if (pos - self._drag_start_pos).manhattanLength() > 5:
                     self._is_dragging = True
                     self._scroll_timer.start()
-                    self.setCursor(Qt.ClosedHandCursor)
+                    self.viewport().setCursor(Qt.ClosedHandCursor)
 
             if self._is_dragging:
                 self._current_mouse_y = max(0, min(pos.y(), self.viewport().height()))
@@ -788,6 +811,35 @@ class ReorderableTableWidget(QTableWidget):
 
                 self._update_target_row_from_mouse()
                 return
+
+        # Track hover cell and update cursor when not dragging
+        pos = event.pos()
+        item = self.itemAt(pos)
+        if item:
+            hover_row = item.row()
+            hover_col = item.column()
+        else:
+            hover_row = -1
+            hover_col = -1
+
+        if hover_row != self._hover_row or hover_col != self._hover_col:
+            self._hover_row = hover_row
+            self._hover_col = hover_col
+            self.viewport().update()
+
+        if hover_row >= 0:
+            main_ui = self.window()
+            slots_data = getattr(main_ui, 'slots_data', [])
+            has_submat = False
+            if hover_row < len(slots_data):
+                has_submat = (slots_data[hover_row].get('sub_mat') is not None)
+
+            if hover_col == 1 or (hover_col == 3 and has_submat) or hover_col == 4:
+                self.viewport().setCursor(Qt.PointingHandCursor)
+            else:
+                self.viewport().setCursor(Qt.ArrowCursor)
+        else:
+            self.viewport().setCursor(Qt.ArrowCursor)
 
         super(ReorderableTableWidget, self).mouseMoveEvent(event)
 
@@ -819,7 +871,7 @@ class ReorderableTableWidget(QTableWidget):
             self._scroll_direction = 0
             self._active_anim.clear()
             self._row_anim_offsets.clear()
-            self.unsetCursor()
+            self.viewport().setCursor(Qt.ArrowCursor)
 
             main_ui = self.window()
             if hasattr(main_ui, 'finish_drag_reorder'):

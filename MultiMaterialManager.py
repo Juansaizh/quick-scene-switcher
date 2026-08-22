@@ -1158,9 +1158,6 @@ class MultiMaterialManagerUI(QDialog):
             QPushButton#btnApply:pressed {{
                 background-color: #0f7fcf;
             }}
-            QPushButton#btnRefresh {{
-                background-color: #525252;
-            }}
             QCheckBox {{
                 color: #d0d0d0;
                 spacing: 7px;
@@ -1220,12 +1217,6 @@ class MultiMaterialManagerUI(QDialog):
         info_layout.addWidget(self.lbl_mat_name)
         info_layout.addWidget(self.lbl_slot_count)
         header_layout.addLayout(info_layout, 1)
-
-        self.btn_refresh = QPushButton("Refresh", self)
-        self.btn_refresh.setObjectName("btnRefresh")
-        self.btn_refresh.setToolTip("Reload material slots and scene usage counts")
-        self.btn_refresh.clicked.connect(self.refresh_material)
-        header_layout.addWidget(self.btn_refresh)
 
         main_layout.addWidget(header_frame)
 
@@ -1540,12 +1531,6 @@ class MultiMaterialManagerUI(QDialog):
         self.lbl_slot_count.setText("Slots: 5 (Test Mode)")
         self.populate_table()
         self.is_loading = False
-
-    def refresh_material(self):
-        if self.target_material:
-            self.load_material(self.target_material)
-        else:
-            self.check_selection_and_material_changes()
 
     def get_objects_using_material(self, target_mat):
         """Finds all scene geometry objects referencing target_mat."""

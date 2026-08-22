@@ -220,8 +220,10 @@ def init_maxscript_helpers():
                         ) catch (
                             try ( sme.frameSelected() ) catch()
                         )
+                        try ( sme.SetMtlInParamEditor subMat ) catch()
                         return true
                     )
+                    try ( sme.SetMtlInParamEditor subMat ) catch()
                 )
             )
         ) catch (

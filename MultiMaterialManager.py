@@ -132,6 +132,17 @@ def init_maxscript_helpers():
     global _jsh_MMM_GetFaceIDCounts
     global _jsh_MMM_GetMatFingerprint
     global _jsh_MMM_GetMatHandle
+    global _jsh_MMM_CloneMaterial
+
+    fn _jsh_MMM_CloneMaterial mat = (
+        if mat == undefined or not isValidObj mat do return undefined
+        try (
+            local newMat = copy mat
+            return newMat
+        ) catch (
+            return undefined
+        )
+    )
 
     fn _jsh_MMM_GetSelectedMultiMaterial = (
         try (
@@ -1770,9 +1781,46 @@ class MultiMaterialManagerUI(QDialog):
 
         src_slot = self.slots_data[selected_row]
         dup_slot = dict(src_slot)
-        dup_slot['name'] = src_slot['name'] + "_Copy" if src_slot['name'] else ""
+
+        # Clone the sub-material instance in 3ds Max
+        new_sub_mat = None
+        src_sub_mat = src_slot.get('sub_mat')
+        if src_sub_mat is not None and rt:
+            try:
+                if hasattr(rt, '_jsh_MMM_CloneMaterial'):
+                    new_sub_mat = rt._jsh_MMM_CloneMaterial(src_sub_mat)
+                else:
+                    new_sub_mat = rt.copy(src_sub_mat)
+
+                if new_sub_mat is not None and str(new_sub_mat) != "undefined":
+                    src_sub_name = src_slot.get('sub_mat_name', '')
+                    if src_sub_name and src_sub_name != '(None)':
+                        try:
+                            new_sub_mat.name = src_sub_name + "_Copy"
+                        except Exception:
+                            pass
+                        dup_slot['sub_mat_name'] = str(new_sub_mat.name)
+                    dup_slot['sub_mat'] = new_sub_mat
+                else:
+                    dup_slot['sub_mat'] = None
+            except Exception as err:
+                print("Error cloning sub-material: {}".format(err))
+                dup_slot['sub_mat'] = None
+        else:
+            if src_slot.get('sub_mat_name') and src_slot.get('sub_mat_name') != '(None)':
+                dup_slot['sub_mat_name'] = src_slot['sub_mat_name'] + "_Copy"
+
+        if src_slot.get('name'):
+            dup_slot['name'] = src_slot['name'] + "_Copy"
+        elif dup_slot.get('sub_mat_name') and dup_slot.get('sub_mat_name') != '(None)':
+            dup_slot['name'] = dup_slot['sub_mat_name']
+        else:
+            dup_slot['name'] = ""
+
         dup_slot['id'] = len(self.slots_data) + 1
         dup_slot['face_count'] = 0
+        if src_slot.get('color'):
+            dup_slot['color'] = QColor(src_slot['color'])
 
         self.slots_data.insert(selected_row + 1, dup_slot)
 

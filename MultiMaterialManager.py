@@ -286,22 +286,47 @@ def init_maxscript_helpers():
     fn _jsh_MMM_GetMatFingerprint mat = (
         try (
             if mat == undefined or not isValidObj mat or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return ""
+            
+            -- Read-only check: determine effective slot count ignoring trailing undefined slots with duplicate IDs
             local count = mat.numsubs
+            while count > 1 and (count > mat.materialList.count or mat.materialList[count] == undefined or not isValidObj mat.materialList[count]) do (
+                local isGhost = false
+                local curID = if count <= mat.materialIDList.count then mat.materialIDList[count] else count
+                for prev = 1 to (count - 1) do (
+                    local prevID = if prev <= mat.materialIDList.count then mat.materialIDList[prev] else prev
+                    if curID == prevID do (
+                        isGhost = true
+                        exit
+                    )
+                )
+                if isGhost then (
+                    count -= 1
+                ) else (
+                    exit
+                )
+            )
+
             local fp = (mat.name as string) + "|" + (count as string) + "|"
             for i = 1 to count do (
                 local subMat = undefined
-                try ( subMat = mat.materialList[i] ) catch()
-                local hasSub = (subMat != undefined and isValidObj subMat)
-                local subName = "(None)"
-                if hasSub do (
-                    try ( subName = subMat.name as string ) catch()
+                if i <= mat.materialList.count do (
+                    try ( subMat = mat.materialList[i] ) catch()
                 )
+                local hasSub = (subMat != undefined and isValidObj subMat)
+                local subAnimHandle = if hasSub then ((getHandleByAnim subMat) as string) else "0"
+                local subName = if hasSub then (subMat.name as string) else "(None)"
                 local sName = ""
-                try ( if mat.names[i] != undefined do sName = mat.names[i] as string ) catch()
+                if i <= mat.names.count and mat.names[i] != undefined do (
+                    sName = mat.names[i] as string
+                )
                 local sID = i
-                try ( if mat.materialIDList[i] != undefined do sID = mat.materialIDList[i] as integer ) catch()
+                if i <= mat.materialIDList.count and mat.materialIDList[i] != undefined do (
+                    sID = mat.materialIDList[i] as integer
+                )
                 local sEnabled = true
-                try ( if mat.mapEnabled[i] != undefined do sEnabled = mat.mapEnabled[i] as booleanClass ) catch()
+                if i <= mat.mapEnabled.count and mat.mapEnabled[i] != undefined do (
+                    sEnabled = mat.mapEnabled[i] as booleanClass
+                )
                 
                 local colStr = "-1"
                 if hasSub do (
@@ -318,7 +343,7 @@ def init_maxscript_helpers():
                         colStr = ((col.r as integer) as string) + "," + ((col.g as integer) as string) + "," + ((col.b as integer) as string)
                     )
                 )
-                fp += (sID as string) + ":" + (sName as string) + ":" + (subName as string) + ":" + (sEnabled as string) + ":" + colStr + ";"
+                fp += (sID as string) + ":" + (sName as string) + ":" + (subName as string) + ":" + subAnimHandle + ":" + (sEnabled as string) + ":" + colStr + ";"
             )
             return fp
         ) catch (
@@ -328,19 +353,47 @@ def init_maxscript_helpers():
 
     fn _jsh_MMM_GetMultiMatData mat = (
         if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return undefined
+        
+        -- Read-only check: determine effective slot count ignoring trailing undefined slots with duplicate IDs
         local count = mat.numsubs
+        while count > 1 and (count > mat.materialList.count or mat.materialList[count] == undefined or not isValidObj mat.materialList[count]) do (
+            local isGhost = false
+            local curID = if count <= mat.materialIDList.count then mat.materialIDList[count] else count
+            for prev = 1 to (count - 1) do (
+                local prevID = if prev <= mat.materialIDList.count then mat.materialIDList[prev] else prev
+                if curID == prevID do (
+                    isGhost = true
+                    exit
+                )
+            )
+            if isGhost then (
+                count -= 1
+            ) else (
+                exit
+            )
+        )
+
         local result = #()
         for i = 1 to count do (
-            local subMat = mat.materialList[i]
+            local subMat = undefined
+            if i <= mat.materialList.count do (
+                try ( subMat = mat.materialList[i] ) catch()
+            )
             local hasSub = (subMat != undefined and isValidObj subMat)
-            local subName = if hasSub then (subMat.name as string) else "(None)"
+            local subName = if hasSub then (subMat.name as string) else "None"
             local subClass = if hasSub then (classOf subMat as string) else "None"
-            local sName = mat.names[i]
-            if sName == undefined do sName = ""
-            local sID = mat.materialIDList[i]
-            if sID == undefined do sID = i
-            local sEnabled = mat.mapEnabled[i]
-            if sEnabled == undefined do sEnabled = true
+            local sName = ""
+            if i <= mat.names.count and mat.names[i] != undefined do (
+                sName = mat.names[i] as string
+            )
+            local sID = i
+            if i <= mat.materialIDList.count and mat.materialIDList[i] != undefined do (
+                sID = mat.materialIDList[i] as integer
+            )
+            local sEnabled = true
+            if i <= mat.mapEnabled.count and mat.mapEnabled[i] != undefined do (
+                sEnabled = mat.mapEnabled[i] as booleanClass
+            )
             
             local col = undefined
             if hasSub do (
@@ -385,6 +438,20 @@ def init_maxscript_helpers():
 
     fn _jsh_MMM_ApplyMultiMatData mat count subMats names ids enableds = (
         if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
+        
+        while mat.materialList.count > count do (
+            deleteItem mat.materialList mat.materialList.count
+        )
+        while mat.names.count > count do (
+            deleteItem mat.names mat.names.count
+        )
+        while mat.materialIDList.count > count do (
+            deleteItem mat.materialIDList mat.materialIDList.count
+        )
+        while mat.mapEnabled.count > count do (
+            deleteItem mat.mapEnabled mat.mapEnabled.count
+        )
+        
         mat.numsubs = count
         for i = 1 to count do (
             mat.materialList[i] = subMats[i]
@@ -1581,9 +1648,13 @@ class MultiMaterialManagerUI(QDialog):
             detected_mat = None
 
         if detected_mat is None:
-            if self._current_mat_handle != 0:
+            if self.target_material and rt and rt.isValidObj(self.target_material):
+                detected_mat = self.target_material
+            elif self._current_mat_handle != 0:
                 self.clear_ui()
-            return
+                return
+            else:
+                return
 
         try:
             mat_handle = int(rt._jsh_MMM_GetMatHandle(detected_mat))

@@ -648,6 +648,40 @@ def create_color_swatch_pixmap(qcolor, size=18):
     return pixmap
 
 
+class CustomHeaderView(QHeaderView):
+    def __init__(self, orientation, parent=None):
+        super(CustomHeaderView, self).__init__(orientation, parent)
+        self.setSectionsClickable(True)
+        self.setHighlightSections(True)
+        self.setMouseTracking(True)
+
+    def mouseMoveEvent(self, event):
+        idx = self.logicalIndexAt(event.pos())
+        if idx == 0:
+            self.setCursor(Qt.PointingHandCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+        super(CustomHeaderView, self).mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.setCursor(Qt.ArrowCursor)
+        super(CustomHeaderView, self).leaveEvent(event)
+
+    def paintSection(self, painter, rect, logicalIndex):
+        super(CustomHeaderView, self).paintSection(painter, rect, logicalIndex)
+        if logicalIndex == 0:
+            main_ui = self.window()
+            duplicate_ids = getattr(main_ui, '_duplicate_ids', set())
+            if duplicate_ids:
+                painter.save()
+                painter.setRenderHint(QPainter.Antialiasing)
+                box_rect = QRect(rect.x() + 3, rect.y() + 3, rect.width() - 6, rect.height() - 6)
+                painter.setBrush(QBrush(QColor(180, 45, 45, 90)))
+                painter.setPen(QPen(QColor(235, 75, 75), 1.5))
+                painter.drawRoundedRect(box_rect, 3, 3)
+                painter.restore()
+
+
 class UnifiedTableItemDelegate(QStyledItemDelegate):
     def __init__(self, parent_table):
         super(UnifiedTableItemDelegate, self).__init__(parent_table)
@@ -676,8 +710,19 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
 
         if col == 0:
             painter.setFont(QFont("Segoe UI", 9, QFont.Bold))
-            painter.setPen(QPen(QColor(235, 235, 235)))
-            painter.drawText(rect, Qt.AlignCenter, str(slot['id']))
+            slot_id = slot.get('id')
+            duplicate_ids = getattr(main_ui, '_duplicate_ids', set())
+
+            if slot_id in duplicate_ids:
+                box_rect = QRect(rect.x() + 4, rect.y() + 3, rect.width() - 8, rect.height() - 6)
+                painter.setBrush(QBrush(QColor(180, 45, 45, 120)))
+                painter.setPen(QPen(QColor(235, 75, 75), 1.5))
+                painter.drawRoundedRect(box_rect, 3, 3)
+                painter.setPen(QPen(QColor(255, 220, 220)))
+            else:
+                painter.setPen(QPen(QColor(235, 235, 235)))
+
+            painter.drawText(rect, Qt.AlignCenter, str(slot_id))
 
         elif col == 1:
             swatch_pix = create_color_swatch_pixmap(slot.get('color'), size=18)
@@ -1018,8 +1063,18 @@ class ReorderableTableWidget(QTableWidget):
         x0 = self.columnViewportPosition(0)
         w0 = self.columnWidth(0)
         painter.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        painter.setPen(QPen(QColor(235, 235, 235)))
-        painter.drawText(QRect(x0, int(y_draw), w0, h), Qt.AlignCenter, str(slot['id']))
+        slot_id = slot.get('id')
+        main_ui = self.window()
+        duplicate_ids = getattr(main_ui, '_duplicate_ids', set())
+        if slot_id in duplicate_ids:
+            box_rect = QRect(x0 + 4, int(y_draw) + 3, w0 - 8, h - 6)
+            painter.setBrush(QBrush(QColor(180, 45, 45, 120)))
+            painter.setPen(QPen(QColor(235, 75, 75), 1.5))
+            painter.drawRoundedRect(box_rect, 3, 3)
+            painter.setPen(QPen(QColor(255, 220, 220)))
+        else:
+            painter.setPen(QPen(QColor(235, 235, 235)))
+        painter.drawText(QRect(x0, int(y_draw), w0, h), Qt.AlignCenter, str(slot_id))
 
         # Color Swatch
         x1 = self.columnViewportPosition(1)
@@ -1152,7 +1207,6 @@ class MultiMaterialManagerUI(QDialog):
         super(MultiMaterialManagerUI, self).__init__(max_parent)
 
         init_maxscript_helpers()
-
         self.target_material = target_material
         self._current_mat_handle = 0
         self._last_fingerprint = ""
@@ -1160,6 +1214,7 @@ class MultiMaterialManagerUI(QDialog):
         self._current_status_text = "● Live Sync Active"
         self.slots_data = []
         self.initial_id_map = {}
+        self._duplicate_ids = set()
         self.is_loading = False
 
         self.setWindowTitle("Multi-Material Manager")
@@ -1187,38 +1242,37 @@ class MultiMaterialManagerUI(QDialog):
 
     def setup_style(self):
         check_icon = get_cached_checkmark_icon_path()
-
-        self.setStyleSheet("""
-            QDialog {{
+        style = """
+            QDialog {
                 background-color: #444444;
                 color: #dedede;
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-size: 12px;
-            }}
-            QFrame#headerFrame {{
+            }
+            QFrame#headerFrame {
                 background-color: transparent;
                 border: 1px solid transparent;
                 border-radius: 4px;
                 padding: 2px 4px;
-            }}
-            QFrame#headerFrame:hover {{
+            }
+            QFrame#headerFrame:hover {
                 background-color: #4e4e4e;
                 border: 1px solid #626262;
-            }}
-            QLabel {{
+            }
+            QLabel {
                 color: #dedede;
                 font-family: 'Segoe UI', Arial, sans-serif;
-            }}
-            QLabel#matTitle {{
+            }
+            QLabel#matTitle {
                 font-size: 14px;
                 font-weight: bold;
                 color: #ffffff;
-            }}
-            QLabel#slotCountLabel {{
+            }
+            QLabel#slotCountLabel {
                 font-size: 14px;
                 color: #b5b5b5;
-            }}
-            QTableWidget {{
+            }
+            QTableWidget {
                 background-color: #484848;
                 border: 1px solid #555555;
                 border-radius: 4px;
@@ -1229,15 +1283,15 @@ class MultiMaterialManagerUI(QDialog):
                 alternate-background-color: #525252;
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-size: 12px;
-            }}
-            QTableWidget::item {{
+            }
+            QTableWidget::item {
                 padding: 4px 8px;
                 border: none;
-            }}
-            QTableWidget::item:selected {{
+            }
+            QTableWidget::item:selected {
                 background-color: #1e4976;
-            }}
-            QHeaderView::section {{
+            }
+            QHeaderView::section {
                 background-color: #383838;
                 color: #d6d6d6;
                 padding: 6px 8px;
@@ -1246,8 +1300,11 @@ class MultiMaterialManagerUI(QDialog):
                 font-size: 12px;
                 border: none;
                 border-bottom: 1px solid #4f4f4f;
-            }}
-            QPushButton {{
+            }
+            QHeaderView::section:hover {
+                background-color: #444444;
+            }
+            QPushButton {
                 background-color: #525252;
                 color: #dedede;
                 border: 1px solid #686868;
@@ -1257,67 +1314,68 @@ class MultiMaterialManagerUI(QDialog):
                 font-weight: 500;
                 font-size: 12px;
                 min-height: 20px;
-            }}
-            QPushButton:hover {{
+            }
+            QPushButton:hover {
                 background-color: #5f5f5f;
                 border-color: #7d7d7d;
-            }}
-            QPushButton:pressed {{
+            }
+            QPushButton:pressed {
                 background-color: #3a3a3a;
-            }}
-            QPushButton#btnApply {{
+            }
+            QPushButton#btnApply {
                 background-color: #1e9bfd;
                 color: #ffffff;
                 border: 1px solid #168de6;
                 font-weight: bold;
                 font-size: 13px;
                 padding: 7px 18px;
-            }}
-            QPushButton#btnApply:hover {{
+            }
+            QPushButton#btnApply:hover {
                 background-color: #168de6;
-            }}
-            QPushButton#btnApply:pressed {{
+            }
+            QPushButton#btnApply:pressed {
                 background-color: #0f7fcf;
-            }}
-            QCheckBox {{
+            }
+            QCheckBox {
                 color: #d0d0d0;
                 spacing: 7px;
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-size: 12px;
-            }}
-            QCheckBox::indicator {{
+            }
+            QCheckBox::indicator {
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
                 border: 1px solid #666666;
                 background-color: #383838;
-            }}
-            QCheckBox::indicator:hover {{
+            }
+            QCheckBox::indicator:hover {
                 border: 1px solid #888888;
                 background-color: #424242;
-            }}
-            QCheckBox::indicator:checked {{
+            }
+            QCheckBox::indicator:checked {
                 background-color: #1e9bfd;
                 border: 1px solid #1e9bfd;
                 image: url("{check_icon}");
-            }}
-            QCheckBox::indicator:checked:hover {{
+            }
+            QCheckBox::indicator:checked:hover {
                 background-color: #168de6;
                 border: 1px solid #168de6;
-            }}
-            QProgressBar {{
+            }
+            QProgressBar {
                 border: 1px solid #555555;
                 border-radius: 4px;
                 text-align: center;
                 background-color: #333333;
                 color: #ffffff;
                 height: 14px;
-            }}
-            QProgressBar::chunk {{
+            }
+            QProgressBar::chunk {
                 background-color: #1e9bfd;
                 border-radius: 3px;
-            }}
-        """.format(check_icon=check_icon))
+            }
+        """.replace("{check_icon}", check_icon)
+        self.setStyleSheet(style)
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -1350,6 +1408,8 @@ class MultiMaterialManagerUI(QDialog):
         main_layout.addWidget(self.header_frame)
 
         self.table = ReorderableTableWidget(self)
+        self.custom_header = CustomHeaderView(Qt.Horizontal, self.table)
+        self.table.setHorizontalHeader(self.custom_header)
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(["ID", "Color", "Name", "Sub-Material", "On", "Used Faces"])
         self.table.setAlternatingRowColors(True)
@@ -1363,6 +1423,7 @@ class MultiMaterialManagerUI(QDialog):
         header.setSectionResizeMode(3, QHeaderView.Stretch)
         header.setSectionResizeMode(4, QHeaderView.Fixed)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        header.sectionClicked.connect(self.on_header_section_clicked)
 
         self.table.setColumnWidth(0, 54)
         self.table.setColumnWidth(1, 52)
@@ -1806,8 +1867,43 @@ class MultiMaterialManagerUI(QDialog):
         self.sync_to_max("Apply MultiMaterial Changes", update_geom=self.chk_update_faces.isChecked())
         QMessageBox.information(self, "Success", "Successfully applied all changes to '{}'.".format(getattr(self.target_material, 'name', 'MultiMaterial')))
 
+    def update_duplicate_ids(self):
+        id_counts = {}
+        for s in self.slots_data:
+            sid = s.get('id')
+            if sid is not None:
+                id_counts[sid] = id_counts.get(sid, 0) + 1
+        self._duplicate_ids = {sid for sid, count in id_counts.items() if count > 1}
+        if hasattr(self, 'table') and hasattr(self.table, 'horizontalHeader'):
+            self.table.horizontalHeader().viewport().update()
+
+    def on_header_section_clicked(self, logicalIndex):
+        if logicalIndex == 0:
+            self.sort_by_id()
+
+    def sort_by_id(self):
+        if not self.slots_data or len(self.slots_data) < 2:
+            return
+
+        is_asc = all(self.slots_data[i]['id'] <= self.slots_data[i+1]['id'] for i in range(len(self.slots_data)-1))
+
+        if is_asc:
+            self.slots_data.sort(key=lambda s: s.get('id', 0), reverse=True)
+            sort_dir = "Descending"
+        else:
+            self.slots_data.sort(key=lambda s: s.get('id', 0))
+            sort_dir = "Ascending"
+
+        self.populate_table()
+
+        if self.is_live_sync:
+            self.sync_to_max("Sort Slots by ID ({})".format(sort_dir), update_geom=False)
+        else:
+            self.set_status("● Paused: Slots sorted by ID ({})".format(sort_dir))
+
     def populate_table(self):
         self.is_loading = True
+        self.update_duplicate_ids()
         self.table.setRowCount(len(self.slots_data))
 
         for row, slot in enumerate(self.slots_data):
@@ -2029,6 +2125,8 @@ class MultiMaterialManagerUI(QDialog):
                 try:
                     new_id = int(id_item.text().strip())
                     slot['id'] = new_id
+                    self.update_duplicate_ids()
+                    self.table.viewport().update()
                     if self.is_live_sync and self.target_material and rt:
                         if self.chk_update_faces.isChecked():
                             self.sync_to_max("Change Slot ID", update_geom=True)

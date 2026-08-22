@@ -134,6 +134,9 @@ def init_maxscript_helpers():
     global _jsh_MMM_GetMatHandle
     global _jsh_MMM_CloneMaterial
     global _jsh_MMM_OpenInSME
+    global _jsh_MMM_SetSlotName
+    global _jsh_MMM_SetSlotID
+    global _jsh_MMM_SetSlotEnabled
 
     fn _jsh_MMM_CloneMaterial mat = (
         if mat == undefined or not isValidObj mat do return undefined
@@ -390,6 +393,51 @@ def init_maxscript_helpers():
         try ( notifyDependents mat ) catch()
         try ( redrawViews() ) catch()
         true
+    )
+
+    fn _jsh_MMM_SetSlotName mat slotIndex newName syncSubMat = (
+        if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
+        if slotIndex < 1 or slotIndex > mat.numsubs do return false
+        try (
+            mat.names[slotIndex] = newName as string
+            if syncSubMat do (
+                local subMat = mat.materialList[slotIndex]
+                if subMat != undefined and isValidObj subMat do (
+                    subMat.name = newName as string
+                )
+            )
+            notifyDependents mat
+            redrawViews()
+            return true
+        ) catch (
+            return false
+        )
+    )
+
+    fn _jsh_MMM_SetSlotID mat slotIndex newID = (
+        if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
+        if slotIndex < 1 or slotIndex > mat.numsubs do return false
+        try (
+            mat.materialIDList[slotIndex] = newID as integer
+            notifyDependents mat
+            redrawViews()
+            return true
+        ) catch (
+            return false
+        )
+    )
+
+    fn _jsh_MMM_SetSlotEnabled mat slotIndex isEnabled = (
+        if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
+        if slotIndex < 1 or slotIndex > mat.numsubs do return false
+        try (
+            mat.mapEnabled[slotIndex] = isEnabled as booleanClass
+            notifyDependents mat
+            redrawViews()
+            return true
+        ) catch (
+            return false
+        )
     )
 
     fn _jsh_MMM_UpdateEditPolyFaceIDs obj epMod oldIDs newIDs = (
@@ -724,7 +772,17 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
                     slot['enabled'] = not slot.get('enabled', True)
                     self.table.viewport().update()
                     if hasattr(main_ui, 'is_live_sync') and main_ui.is_live_sync:
-                        if hasattr(main_ui, 'sync_to_max'):
+                        if main_ui.target_material and rt:
+                            try:
+                                rt._jsh_MMM_SetSlotEnabled(main_ui.target_material, row + 1, slot['enabled'])
+                                main_ui.set_status("● Live Sync: Slot #{} {}".format(slot['id'], "Enabled" if slot['enabled'] else "Disabled"))
+                                try:
+                                    main_ui._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(main_ui.target_material))
+                                except Exception:
+                                    pass
+                            except Exception:
+                                main_ui.sync_to_max("Toggle Slot Enable")
+                        else:
                             main_ui.sync_to_max("Toggle Slot Enable")
                     else:
                         main_ui.set_status("● Paused: Slot #{} toggled".format(slot['id']))
@@ -1697,20 +1755,6 @@ class MultiMaterialManagerUI(QDialog):
                             except Exception as err:
                                 print("Error updating face IDs on object {}: {}".format(getattr(obj, 'name', 'obj'), err))
 
-            # Force reference pipeline notification and Nitrous viewport redraw
-            try:
-                rt.notifyDependents(mat)
-                scene_objs = self.get_objects_using_material(mat)
-                for obj in scene_objs:
-                    try:
-                        rt.update(obj)
-                        rt.notifyDependents(obj)
-                    except Exception:
-                        pass
-                rt.redrawViews()
-            except Exception:
-                pass
-
             rt.theHold.Accept(action_name)
             if faces_updated_count > 0:
                 self.set_status("● Live Sync: {} ({} faces)".format(action_name, faces_updated_count))
@@ -1733,6 +1777,30 @@ class MultiMaterialManagerUI(QDialog):
         if not self.target_material or not rt:
             QMessageBox.information(self, "Apply Changes", "Changes applied (Standalone test mode).")
             return
+
+        # If Sync Names is checked, rename any sub-materials that were changed while paused
+        if self.chk_sync_names.isChecked():
+            for slot in self.slots_data:
+                sub_mat = slot.get('sub_mat')
+                if sub_mat and slot.get('name'):
+                    try:
+                        if str(getattr(sub_mat, 'name', '')) != str(slot['name']):
+                            sub_mat.name = str(slot['name'])
+                            slot['sub_mat_name'] = str(slot['name'])
+                    except Exception:
+                        pass
+
+        # Apply any sub-material colors that were changed while paused
+        for slot in self.slots_data:
+            sub_mat = slot.get('sub_mat')
+            color = slot.get('color')
+            if sub_mat and color:
+                try:
+                    lin_r, lin_g, lin_b = srgb_to_linear_rgb(color)
+                    rt._jsh_MMM_SetSubMaterialColor(sub_mat, lin_r, lin_g, lin_b)
+                except Exception:
+                    pass
+
         self.sync_to_max("Apply MultiMaterial Changes", update_geom=self.chk_update_faces.isChecked())
         QMessageBox.information(self, "Success", "Successfully applied all changes to '{}'.".format(getattr(self.target_material, 'name', 'MultiMaterial')))
 
@@ -1872,6 +1940,10 @@ class MultiMaterialManagerUI(QDialog):
             slot['color'] = new_color
             self.table.viewport().update()
 
+            if not self.is_live_sync:
+                self.set_status("● Paused: Color changed")
+                return
+
             lin_r, lin_g, lin_b = srgb_to_linear_rgb(new_color)
 
             if rt:
@@ -1955,8 +2027,19 @@ class MultiMaterialManagerUI(QDialog):
                 try:
                     new_id = int(id_item.text().strip())
                     slot['id'] = new_id
-                    if self.is_live_sync:
-                        self.sync_to_max("Change Slot ID", update_geom=True)
+                    if self.is_live_sync and self.target_material and rt:
+                        if self.chk_update_faces.isChecked():
+                            self.sync_to_max("Change Slot ID", update_geom=True)
+                        else:
+                            try:
+                                rt._jsh_MMM_SetSlotID(self.target_material, row + 1, new_id)
+                                self.set_status("● Live Sync: ID changed")
+                                try:
+                                    self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
+                                except Exception:
+                                    pass
+                            except Exception:
+                                self.sync_to_max("Change Slot ID", update_geom=False)
                     else:
                         self.set_status("● Paused: ID changed")
                 except ValueError:
@@ -1968,22 +2051,29 @@ class MultiMaterialManagerUI(QDialog):
                 new_name = name_item.text()
                 slot['name'] = new_name
 
-                if self.chk_sync_names.isChecked() and slot['sub_mat']:
-                    try:
-                        slot['sub_mat'].name = new_name
-                        slot['sub_mat_name'] = new_name
-                        sub_text = new_name
-                        if slot['sub_mat_class'] and slot['sub_mat_class'] != 'None':
-                            sub_text += "  ({})".format(slot['sub_mat_class'])
-                        sub_item = self.table.item(row, 3)
-                        if sub_item:
-                            sub_item.setText(sub_text)
-                    except Exception as e:
-                        print("Error renaming submaterial: {}".format(e))
+                if self.chk_sync_names.isChecked():
+                    slot['sub_mat_name'] = new_name
+                    sub_text = new_name
+                    if slot.get('sub_mat_class') and slot['sub_mat_class'] != 'None':
+                        sub_text += "  ({})".format(slot['sub_mat_class'])
+                    sub_item = self.table.item(row, 3)
+                    if sub_item:
+                        sub_item.setText(sub_text)
+
                 self.table.viewport().update()
-                if self.is_live_sync:
-                    self.sync_to_max("Rename Slot", update_geom=False)
-                else:
+
+                if self.is_live_sync and self.target_material and rt:
+                    try:
+                        sync_sub = bool(self.chk_sync_names.isChecked() and slot.get('sub_mat') is not None)
+                        rt._jsh_MMM_SetSlotName(self.target_material, row + 1, new_name, sync_sub)
+                        self.set_status("● Live Sync: Slot renamed")
+                        try:
+                            self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        print("Error setting slot name: {}".format(e))
+                elif not self.is_live_sync:
                     self.set_status("● Paused: Slot renamed")
 
     def add_slot(self):

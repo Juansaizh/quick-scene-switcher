@@ -1165,11 +1165,6 @@ class MultiMaterialManagerUI(QDialog):
 
         tools_layout.addStretch(1)
 
-        self.btn_renumber = QPushButton("Renumber IDs (1..N)", self)
-        self.btn_renumber.setToolTip("Force Material IDs to match 1..N order of the current list")
-        self.btn_renumber.clicked.connect(self.force_renumber_ids)
-        tools_layout.addWidget(self.btn_renumber)
-
         main_layout.addLayout(tools_layout)
 
         options_layout = QHBoxLayout()

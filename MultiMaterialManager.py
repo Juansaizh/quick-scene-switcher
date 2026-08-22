@@ -640,16 +640,17 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
 
         elif col == 3:
             painter.setFont(QFont("Segoe UI", 9))
-            sub_text = slot.get('sub_mat_name', '(None)')
-            if slot.get('sub_mat_class') and slot['sub_mat_class'] != 'None':
-                sub_text += "  ({})".format(slot['sub_mat_class'])
             if slot.get('sub_mat'):
+                sub_text = slot.get('sub_mat_name', 'None')
+                if slot.get('sub_mat_class') and slot['sub_mat_class'] != 'None':
+                    sub_text += "  ({})".format(slot['sub_mat_class'])
                 painter.setPen(QPen(QColor(225, 225, 225)))
+                sub_rect = QRect(rect.x() + 9, rect.y(), rect.width() - 18, rect.height())
+                elided_sub = painter.fontMetrics().elidedText(sub_text, Qt.ElideRight, sub_rect.width())
+                painter.drawText(sub_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_sub)
             else:
-                painter.setPen(QPen(QColor(140, 140, 140)))
-            sub_rect = QRect(rect.x() + 9, rect.y(), rect.width() - 18, rect.height())
-            elided_sub = painter.fontMetrics().elidedText(sub_text, Qt.ElideRight, sub_rect.width())
-            painter.drawText(sub_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_sub)
+                painter.setPen(QPen(QColor(135, 135, 135)))
+                painter.drawText(rect, Qt.AlignCenter, "None")
 
         elif col == 4:
             chk_size = 14
@@ -924,16 +925,18 @@ class ReorderableTableWidget(QTableWidget):
         # Sub-Material
         x3 = self.columnViewportPosition(3)
         w3 = self.columnWidth(3)
-        sub_text = slot.get('sub_mat_name', '(None)')
-        if slot.get('sub_mat_class') and slot['sub_mat_class'] != 'None':
-            sub_text += "  ({})".format(slot['sub_mat_class'])
         if slot.get('sub_mat'):
+            sub_text = slot.get('sub_mat_name', 'None')
+            if slot.get('sub_mat_class') and slot['sub_mat_class'] != 'None':
+                sub_text += "  ({})".format(slot['sub_mat_class'])
             painter.setPen(QPen(QColor(225, 225, 225)))
+            sub_rect = QRect(x3 + 9, int(y_draw), w3 - 18, h)
+            elided_sub = painter.fontMetrics().elidedText(sub_text, Qt.ElideRight, sub_rect.width())
+            painter.drawText(sub_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_sub)
         else:
-            painter.setPen(QPen(QColor(140, 140, 140)))
-        sub_rect = QRect(x3 + 9, int(y_draw), w3 - 18, h)
-        elided_sub = painter.fontMetrics().elidedText(sub_text, Qt.ElideRight, sub_rect.width())
-        painter.drawText(sub_rect, Qt.AlignVCenter | Qt.AlignLeft, elided_sub)
+            painter.setPen(QPen(QColor(135, 135, 135)))
+            rect3 = QRect(x3, int(y_draw), w3, h)
+            painter.drawText(rect3, Qt.AlignCenter, "None")
 
         # Enabled Checkbox
         x4 = self.columnViewportPosition(4)
@@ -1496,7 +1499,7 @@ class MultiMaterialManagerUI(QDialog):
                 r, g, b = int(col_arr[0]), int(col_arr[1]), int(col_arr[2])
                 color = linear_to_srgb_color(r, g, b)
 
-                if (not slot_name or slot_name.strip() == "") and sub_mat and sub_mat_name != "(None)":
+                if (not slot_name or slot_name.strip() == "") and sub_mat and sub_mat_name not in ("(None)", "None", ""):
                     slot_name = sub_mat_name
 
                 face_count = id_face_counts.get(slot_id, 0)
@@ -1506,7 +1509,7 @@ class MultiMaterialManagerUI(QDialog):
                     'id': slot_id,
                     'name': slot_name,
                     'sub_mat': sub_mat,
-                    'sub_mat_name': sub_mat_name,
+                    'sub_mat_name': sub_mat_name if sub_mat else 'None',
                     'sub_mat_class': sub_mat_class,
                     'enabled': is_enabled,
                     'color': color,
@@ -1530,7 +1533,7 @@ class MultiMaterialManagerUI(QDialog):
             {'initial_id': 1, 'id': 1, 'name': 'M_Wall_Paint_01', 'sub_mat': None, 'sub_mat_name': 'M_Wall_Paint_01', 'sub_mat_class': 'VRayMtl', 'enabled': True, 'color': QColor(220, 215, 205), 'face_count': 342},
             {'initial_id': 2, 'id': 2, 'name': 'M_Floor_Wood_Oak', 'sub_mat': None, 'sub_mat_name': 'M_Floor_Wood_Oak', 'sub_mat_class': 'CoronaPhysicalMtl', 'enabled': True, 'color': QColor(160, 110, 60), 'face_count': 128},
             {'initial_id': 3, 'id': 3, 'name': 'M_Ceiling_White', 'sub_mat': None, 'sub_mat_name': 'M_Ceiling_White', 'sub_mat_class': 'VRayMtl', 'enabled': True, 'color': QColor(240, 240, 240), 'face_count': 64},
-            {'initial_id': 4, 'id': 4, 'name': '', 'sub_mat': None, 'sub_mat_name': '(None)', 'sub_mat_class': 'None', 'enabled': True, 'color': None, 'face_count': 0},
+            {'initial_id': 4, 'id': 4, 'name': '', 'sub_mat': None, 'sub_mat_name': 'None', 'sub_mat_class': 'None', 'enabled': True, 'color': None, 'face_count': 0},
             {'initial_id': 5, 'id': 5, 'name': 'M_Window_Frame_Black', 'sub_mat': None, 'sub_mat_name': 'M_Window_Frame_Black', 'sub_mat_class': 'PhysicalMaterial', 'enabled': True, 'color': QColor(30, 30, 30), 'face_count': 96},
         ]
         self.lbl_mat_name.setText("Mock_MultiMaterial_Demo")
@@ -1882,7 +1885,7 @@ class MultiMaterialManagerUI(QDialog):
             'id': next_id,
             'name': '',
             'sub_mat': None,
-            'sub_mat_name': '(None)',
+            'sub_mat_name': 'None',
             'sub_mat_class': 'None',
             'enabled': True,
             'color': None,
@@ -1941,7 +1944,7 @@ class MultiMaterialManagerUI(QDialog):
 
                 if new_sub_mat is not None and str(new_sub_mat) != "undefined":
                     src_sub_name = src_slot.get('sub_mat_name', '')
-                    if src_sub_name and src_sub_name != '(None)':
+                    if src_sub_name and src_sub_name not in ('(None)', 'None'):
                         try:
                             new_sub_mat.name = src_sub_name + "_Copy"
                         except Exception:
@@ -1954,12 +1957,12 @@ class MultiMaterialManagerUI(QDialog):
                 print("Error cloning sub-material: {}".format(err))
                 dup_slot['sub_mat'] = None
         else:
-            if src_slot.get('sub_mat_name') and src_slot.get('sub_mat_name') != '(None)':
+            if src_slot.get('sub_mat_name') and src_slot.get('sub_mat_name') not in ('(None)', 'None'):
                 dup_slot['sub_mat_name'] = src_slot['sub_mat_name'] + "_Copy"
 
         if src_slot.get('name'):
             dup_slot['name'] = src_slot['name'] + "_Copy"
-        elif dup_slot.get('sub_mat_name') and dup_slot.get('sub_mat_name') != '(None)':
+        elif dup_slot.get('sub_mat_name') and dup_slot.get('sub_mat_name') not in ('(None)', 'None'):
             dup_slot['name'] = dup_slot['sub_mat_name']
         else:
             dup_slot['name'] = ""

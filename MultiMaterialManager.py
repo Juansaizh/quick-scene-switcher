@@ -599,7 +599,7 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
                         if hasattr(main_ui, 'sync_to_max'):
                             main_ui.sync_to_max("Toggle Slot Enable")
                     else:
-                        main_ui.set_status("● Edited slot #{} enable (Pending Apply)".format(slot['id']))
+                        main_ui.set_status("● Paused: Slot #{} toggled".format(slot['id']))
                     return True
         return super(UnifiedTableItemDelegate, self).editorEvent(event, model, option, index)
 
@@ -928,7 +928,7 @@ class MultiMaterialManagerUI(QDialog):
         self._current_mat_handle = 0
         self._last_fingerprint = ""
         self.is_live_sync = True
-        self._current_status_text = "● Synced with 3ds Max"
+        self._current_status_text = "● Live Sync Active"
         self.slots_data = []
         self.initial_id_map = {}
         self.is_loading = False
@@ -981,7 +981,7 @@ class MultiMaterialManagerUI(QDialog):
                 color: #ffffff;
             }}
             QLabel#slotCountLabel {{
-                font-size: 12px;
+                font-size: 14px;
                 color: #b5b5b5;
             }}
             QTableWidget {{
@@ -1144,26 +1144,29 @@ class MultiMaterialManagerUI(QDialog):
         tools_layout.setSpacing(6)
 
         self.btn_add = QPushButton("➕ Add Slot", self)
+        self.btn_add.setToolTip("Add a new empty slot at the end of the material list")
         self.btn_add.clicked.connect(self.add_slot)
         tools_layout.addWidget(self.btn_add)
 
         self.btn_remove = QPushButton("➖ Remove Selected", self)
+        self.btn_remove.setToolTip("Remove the currently selected slot from the material")
         self.btn_remove.clicked.connect(self.remove_selected_slot)
         tools_layout.addWidget(self.btn_remove)
 
         self.btn_duplicate = QPushButton("Duplicate", self)
+        self.btn_duplicate.setToolTip("Duplicate the selected slot with its properties")
         self.btn_duplicate.clicked.connect(self.duplicate_selected_slot)
         tools_layout.addWidget(self.btn_duplicate)
 
         self.btn_clean_empty = QPushButton("Clean Empty Slots", self)
-        self.btn_clean_empty.setToolTip("Removes all slots without a sub-material and compacts IDs sequentially")
+        self.btn_clean_empty.setToolTip("Remove all slots without assigned sub-materials and compact IDs sequentially")
         self.btn_clean_empty.clicked.connect(self.clean_empty_slots)
         tools_layout.addWidget(self.btn_clean_empty)
 
         tools_layout.addStretch(1)
 
         self.btn_renumber = QPushButton("Renumber IDs (1..N)", self)
-        self.btn_renumber.setToolTip("Force IDs to match 1..N order of current list")
+        self.btn_renumber.setToolTip("Force Material IDs to match 1..N order of the current list")
         self.btn_renumber.clicked.connect(self.force_renumber_ids)
         tools_layout.addWidget(self.btn_renumber)
 
@@ -1172,19 +1175,19 @@ class MultiMaterialManagerUI(QDialog):
         options_layout = QHBoxLayout()
         options_layout.setSpacing(18)
 
-        self.chk_auto_renumber = QCheckBox("Auto-Renumber IDs on Drag & Drop", self)
+        self.chk_auto_renumber = QCheckBox("Auto-Renumber IDs", self)
         self.chk_auto_renumber.setChecked(True)
-        self.chk_auto_renumber.setToolTip("When dragging slots, automatically updates Material IDs according to new position (1..N)")
+        self.chk_auto_renumber.setToolTip("Automatically renumbers Material IDs (1..N) according to slot order on drag & drop")
         options_layout.addWidget(self.chk_auto_renumber)
 
-        self.chk_sync_names = QCheckBox("Sync Material Names on Rename", self)
+        self.chk_sync_names = QCheckBox("Sync Names", self)
         self.chk_sync_names.setChecked(True)
-        self.chk_sync_names.setToolTip("When checked, editing the slot name will also rename the assigned sub-material in 3ds Max")
+        self.chk_sync_names.setToolTip("When editing slot names, automatically renames the assigned sub-material in 3ds Max")
         options_layout.addWidget(self.chk_sync_names)
 
-        self.chk_update_faces = QCheckBox("Update Face Material IDs on Geometry", self)
+        self.chk_update_faces = QCheckBox("Update IDs on Geometry", self)
         self.chk_update_faces.setChecked(False)
-        self.chk_update_faces.setToolTip("Reassigns face material IDs on scene objects to match the new slot positions")
+        self.chk_update_faces.setToolTip("Reassigns face Material IDs on scene geometry to match updated slot positions")
         options_layout.addWidget(self.chk_update_faces)
 
         options_layout.addStretch(1)
@@ -1197,13 +1200,14 @@ class MultiMaterialManagerUI(QDialog):
         bottom_layout = QHBoxLayout()
         bottom_layout.setSpacing(10)
 
-        self.btn_toggle_sync = QPushButton("● Synced with 3ds Max: Loaded", self)
-        self.btn_toggle_sync.setToolTip("Click to pause/resume automatic real-time synchronization with 3ds Max")
+        self.btn_toggle_sync = QPushButton("● Live Sync Active", self)
+        self.btn_toggle_sync.setToolTip("Live Sync is active: Changes in the table are immediately synchronized with 3ds Max.\nClick to pause and enable manual Apply mode.")
         self.btn_toggle_sync.clicked.connect(self.toggle_live_sync)
         bottom_layout.addWidget(self.btn_toggle_sync, 1)
 
         self.btn_apply = QPushButton("Apply Changes", self)
         self.btn_apply.setObjectName("btnApply")
+        self.btn_apply.setToolTip("Apply pending local changes to 3ds Max Multi-Material and scene geometry")
         self.btn_apply.clicked.connect(self.apply_changes)
         self.btn_apply.setVisible(False)
         bottom_layout.addWidget(self.btn_apply)
@@ -1223,7 +1227,7 @@ class MultiMaterialManagerUI(QDialog):
             if self.target_material:
                 self.sync_to_max("Resume Live Sync", update_geom=self.chk_update_faces.isChecked())
         else:
-            self.set_status("● Live Sync Paused (Click to Resume)")
+            self.set_status("● Live Sync Paused")
 
     def update_sync_ui_state(self):
         if self.is_live_sync:
@@ -1243,6 +1247,7 @@ class MultiMaterialManagerUI(QDialog):
                     border-radius: 4px;
                 }
             """)
+            self.btn_toggle_sync.setToolTip("Live Sync is active: Changes in the table are immediately synchronized with 3ds Max.\nClick to pause and switch to manual Apply mode.")
             self.btn_apply.setVisible(False)
             self.set_status(self._current_status_text)
         else:
@@ -1263,8 +1268,9 @@ class MultiMaterialManagerUI(QDialog):
                     border-color: #7d7d7d;
                 }
             """)
+            self.btn_toggle_sync.setToolTip("Live Sync is paused: Changes are kept locally.\nClick 'Apply Changes' to save or click here to resume Live Sync.")
             self.btn_apply.setVisible(True)
-            self.btn_toggle_sync.setText("● Live Sync Paused (Click to Resume)")
+            self.btn_toggle_sync.setText("● Live Sync Paused")
 
     def set_status(self, text):
         self._current_status_text = text
@@ -1324,7 +1330,7 @@ class MultiMaterialManagerUI(QDialog):
         self.table.setRowCount(0)
         self.lbl_mat_name.setText("(No Multi/Sub-Object Selected)")
         self.lbl_slot_count.setText("Select a Multi-Material node in SME or an object in viewport")
-        self.set_status("● Live Tracking: Waiting for Multi-Material selection...")
+        self.set_status("● Live Sync: Waiting for selection...")
         self.is_loading = False
 
     def load_material(self, mat):
@@ -1404,7 +1410,7 @@ class MultiMaterialManagerUI(QDialog):
                 self.initial_id_map[i] = slot_id
 
             self.populate_table()
-            self.set_status("● Synced with 3ds Max: Loaded '{}' ({} slots)".format(mat_name, len(self.slots_data)))
+            self.set_status("● Live Sync Active")
 
         except Exception as e:
             traceback.print_exc()
@@ -1524,9 +1530,9 @@ class MultiMaterialManagerUI(QDialog):
 
             rt.theHold.Accept(action_name)
             if faces_updated_count > 0:
-                self.set_status("● Synced: {} (Updated {} faces on geometry)".format(action_name, faces_updated_count))
+                self.set_status("● Live Sync: {} ({} faces)".format(action_name, faces_updated_count))
             else:
-                self.set_status("● Synced: {}".format(action_name))
+                self.set_status("● Live Sync: {}".format(action_name))
 
             for s in self.slots_data:
                 s['initial_id'] = s['id']
@@ -1622,7 +1628,7 @@ class MultiMaterialManagerUI(QDialog):
                 try:
                     rt._jsh_MMM_SetSubMaterialColor(sub_mat, lin_r, lin_g, lin_b)
                     rt.theHold.Accept("Change Material Color")
-                    self.set_status("● Synced: Color updated for slot #{}".format(slot['id']))
+                    self.set_status("● Live Sync: Color updated")
                     try:
                         self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
                     except Exception:
@@ -1657,9 +1663,9 @@ class MultiMaterialManagerUI(QDialog):
                 self.table.selectRow(current_row)
 
         if self.is_live_sync:
-            self.sync_to_max("Reorder MultiMaterial Slots", update_geom=True)
+            self.sync_to_max("Reorder Slots", update_geom=True)
         else:
-            self.set_status("● Slots reordered locally (Pending Apply)")
+            self.set_status("● Paused: Slots reordered")
 
     def force_renumber_ids(self, refresh_table=True):
         for idx, slot in enumerate(self.slots_data):
@@ -1669,7 +1675,7 @@ class MultiMaterialManagerUI(QDialog):
         if self.is_live_sync:
             self.sync_to_max("Renumber IDs", update_geom=True)
         else:
-            self.set_status("● Renumbered IDs locally (Pending Apply)")
+            self.set_status("● Paused: IDs renumbered")
 
     def on_table_cell_changed(self, row, column):
         if self.is_loading or row >= len(self.slots_data):
@@ -1686,7 +1692,7 @@ class MultiMaterialManagerUI(QDialog):
                     if self.is_live_sync:
                         self.sync_to_max("Change Slot ID", update_geom=True)
                     else:
-                        self.set_status("● Changed ID locally (Pending Apply)")
+                        self.set_status("● Paused: ID changed")
                 except ValueError:
                     id_item.setText(str(slot['id']))
 
@@ -1712,7 +1718,7 @@ class MultiMaterialManagerUI(QDialog):
                 if self.is_live_sync:
                     self.sync_to_max("Rename Slot", update_geom=False)
                 else:
-                    self.set_status("● Renamed slot locally (Pending Apply)")
+                    self.set_status("● Paused: Slot renamed")
 
     def add_slot(self):
         if not self.target_material:
@@ -1735,7 +1741,7 @@ class MultiMaterialManagerUI(QDialog):
         if self.is_live_sync:
             self.sync_to_max("Add Slot", update_geom=False)
         else:
-            self.set_status("● Added slot locally (Pending Apply)")
+            self.set_status("● Paused: Slot added")
 
     def remove_selected_slot(self):
         if not self.target_material:
@@ -1757,7 +1763,7 @@ class MultiMaterialManagerUI(QDialog):
         if self.is_live_sync:
             self.sync_to_max("Remove Slot", update_geom=True)
         else:
-            self.set_status("● Removed slot locally (Pending Apply)")
+            self.set_status("● Paused: Slot removed")
 
     def duplicate_selected_slot(self):
         if not self.target_material:
@@ -1783,7 +1789,7 @@ class MultiMaterialManagerUI(QDialog):
         if self.is_live_sync:
             self.sync_to_max("Duplicate Slot", update_geom=False)
         else:
-            self.set_status("● Duplicated slot locally (Pending Apply)")
+            self.set_status("● Paused: Slot duplicated")
 
     def clean_empty_slots(self):
         if not self.target_material:
@@ -1808,7 +1814,7 @@ class MultiMaterialManagerUI(QDialog):
             if self.is_live_sync:
                 self.sync_to_max("Clean Empty Slots", update_geom=True)
             else:
-                self.set_status("● Cleaned empty slots locally (Pending Apply)")
+                self.set_status("● Paused: Cleaned empty slots")
 
 
 def show_ui(target_material=None):

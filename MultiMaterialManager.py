@@ -133,6 +133,7 @@ def init_maxscript_helpers():
     global _jsh_MMM_GetMatFingerprint
     global _jsh_MMM_GetMatHandle
     global _jsh_MMM_CloneMaterial
+    global _jsh_MMM_OpenInSME
 
     fn _jsh_MMM_CloneMaterial mat = (
         if mat == undefined or not isValidObj mat do return undefined
@@ -142,6 +143,88 @@ def init_maxscript_helpers():
         ) catch (
             return undefined
         )
+    )
+
+    fn _jsh_MMM_OpenInSME subMat = (
+        if subMat == undefined or not isValidObj subMat do return false
+        try (
+            if sme != undefined do (
+                if not (sme.isOpen()) do (
+                    try ( MatEditor.mode = #slate ) catch()
+                    sme.open()
+                )
+                
+                local activeViewIdx = sme.activeView
+                if activeViewIdx <= 0 do (
+                    if sme.numViews > 0 then (
+                        activeViewIdx = 1
+                        sme.activeView = 1
+                    ) else (
+                        activeViewIdx = sme.createView "Materials"
+                        sme.activeView = activeViewIdx
+                    )
+                )
+                
+                local view = sme.getView activeViewIdx
+                if view != undefined do (
+                    local targetNode = undefined
+                    
+                    try (
+                        local numN = view.GetNumNodes()
+                        for i = 1 to numN do (
+                            local n = view.GetNode i
+                            if n != undefined and isValidObj n and n.reference == subMat do (
+                                targetNode = n
+                                exit
+                            )
+                        )
+                    ) catch()
+                    
+                    if targetNode == undefined do (
+                        try (
+                            for vIdx = 1 to sme.numViews do (
+                                if vIdx != activeViewIdx do (
+                                    local v = sme.getView vIdx
+                                    if v != undefined do (
+                                        local vNumN = v.GetNumNodes()
+                                        for j = 1 to vNumN do (
+                                            local n = v.GetNode j
+                                            if n != undefined and isValidObj n and n.reference == subMat do (
+                                                sme.activeView = vIdx
+                                                view = v
+                                                targetNode = n
+                                                exit
+                                            )
+                                        )
+                                    )
+                                )
+                                if targetNode != undefined do exit
+                            )
+                        ) catch()
+                    )
+                    
+                    if targetNode == undefined do (
+                        try (
+                            targetNode = view.createNode subMat [0, 0]
+                        ) catch()
+                    )
+                    
+                    if targetNode != undefined do (
+                        try ( view.SelectNone() ) catch()
+                        try ( targetNode.selected = true ) catch()
+                        try (
+                            view.ZoomExtents type:#selected
+                        ) catch (
+                            try ( sme.frameSelected() ) catch()
+                        )
+                        return true
+                    )
+                )
+            )
+        ) catch (
+            format "Error opening in SME: %\\n" (getCurrentException())
+        )
+        false
     )
 
     fn _jsh_MMM_GetSelectedMultiMaterial = (
@@ -596,6 +679,22 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
             painter.drawText(rect, Qt.AlignCenter, used_text)
 
         painter.restore()
+
+    def createEditor(self, parent, option, index):
+        if index.column() in (0, 2):
+            editor = super(UnifiedTableItemDelegate, self).createEditor(parent, option, index)
+            if isinstance(editor, QLineEdit):
+                editor.setStyleSheet("""
+                    QLineEdit {
+                        background-color: #2b2b2b;
+                        color: #ffffff;
+                        border: 1px solid #1e9bfd;
+                        border-radius: 2px;
+                        padding: 2px 4px;
+                    }
+                """)
+            return editor
+        return None
 
     def editorEvent(self, event, model, option, index):
         if index.column() == 4:
@@ -1149,6 +1248,7 @@ class MultiMaterialManagerUI(QDialog):
 
         self.table.cellChanged.connect(self.on_table_cell_changed)
         self.table.cellClicked.connect(self.on_table_cell_clicked)
+        self.table.cellDoubleClicked.connect(self.on_table_cell_double_clicked)
         main_layout.addWidget(self.table, 1)
 
         tools_layout = QHBoxLayout()
@@ -1566,6 +1666,8 @@ class MultiMaterialManagerUI(QDialog):
         for row, slot in enumerate(self.slots_data):
             id_item = QTableWidgetItem(str(slot['id']))
             id_item.setTextAlignment(Qt.AlignCenter)
+            id_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
+            id_item.setToolTip("Double-click to edit Material ID")
             self.table.setItem(row, 0, id_item)
 
             swatch_item = QTableWidgetItem()
@@ -1574,16 +1676,24 @@ class MultiMaterialManagerUI(QDialog):
             self.table.setItem(row, 1, swatch_item)
 
             name_item = QTableWidgetItem(slot['name'])
+            name_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
+            name_item.setToolTip("Double-click to edit slot name")
             self.table.setItem(row, 2, name_item)
 
             sub_text = slot['sub_mat_name']
             if slot['sub_mat_class'] and slot['sub_mat_class'] != 'None':
                 sub_text += "  ({})".format(slot['sub_mat_class'])
             sub_item = QTableWidgetItem(sub_text)
+            sub_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            if slot.get('sub_mat'):
+                sub_item.setToolTip("Click to open and select '{}' in Slate Material Editor".format(slot.get('sub_mat_name', 'Sub-Material')))
+            else:
+                sub_item.setToolTip("No sub-material assigned to this slot")
             self.table.setItem(row, 3, sub_item)
 
             chk_item = QTableWidgetItem()
             chk_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            chk_item.setToolTip("Click to enable/disable slot")
             self.table.setItem(row, 4, chk_item)
 
             used_faces = slot.get('face_count', 0)
@@ -1598,8 +1708,45 @@ class MultiMaterialManagerUI(QDialog):
         self.is_loading = False
 
     def on_table_cell_clicked(self, row, column):
-        if column == 1 and not self.table._is_dragging:
+        if self.table._is_dragging:
+            return
+        if column == 1:
             self.pick_slot_color(row)
+        elif column == 3:
+            self.open_submaterial_in_sme(row)
+
+    def on_table_cell_double_clicked(self, row, column):
+        if self.table._is_dragging:
+            return
+        if column == 3:
+            self.open_submaterial_in_sme(row)
+
+    def open_submaterial_in_sme(self, row):
+        if row < 0 or row >= len(self.slots_data):
+            return
+
+        slot = self.slots_data[row]
+        sub_mat = slot.get('sub_mat')
+
+        if not sub_mat:
+            self.set_status("● Slot #{} has no sub-material assigned".format(slot.get('id', row + 1)))
+            return
+
+        if rt:
+            try:
+                if not hasattr(rt, '_jsh_MMM_OpenInSME') or rt._jsh_MMM_OpenInSME is None:
+                    init_maxscript_helpers()
+
+                success = bool(rt._jsh_MMM_OpenInSME(sub_mat))
+                if success:
+                    self.set_status("● Slate Editor: Focused '{}'".format(slot.get('sub_mat_name', 'Material')))
+                else:
+                    self.set_status("● Slate Material Editor opened")
+            except Exception as e:
+                print("Error opening material in SME: {}".format(e))
+                self.set_status("● Error opening Slate Material Editor")
+        else:
+            self.set_status("● Slate Editor: Focused '{}' (Test Mode)".format(slot.get('sub_mat_name', 'Material')))
 
     def pick_slot_color(self, row):
         if row < 0 or row >= len(self.slots_data):

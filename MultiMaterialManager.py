@@ -1085,8 +1085,13 @@ class MultiMaterialManagerUI(QDialog):
             }}
             QFrame#headerFrame {{
                 background-color: transparent;
-                border: none;
-                padding: 0px 2px 2px 2px;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px 4px;
+            }}
+            QFrame#headerFrame:hover {{
+                background-color: #4e4e4e;
+                border: 1px solid #626262;
             }}
             QLabel {{
                 color: #dedede;
@@ -1207,22 +1212,30 @@ class MultiMaterialManagerUI(QDialog):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
-        header_frame = QFrame(self)
-        header_frame.setObjectName("headerFrame")
-        header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(2, 2, 2, 2)
+        self.header_frame = QFrame(self)
+        self.header_frame.setObjectName("headerFrame")
+        self.header_frame.setCursor(Qt.PointingHandCursor)
+        self.header_frame.setToolTip("Click to open and select this Multi-Material in Slate Material Editor")
+        self.header_frame.mousePressEvent = lambda event: self.open_target_material_in_sme() if event.button() == Qt.LeftButton else None
+
+        header_layout = QHBoxLayout(self.header_frame)
+        header_layout.setContentsMargins(4, 4, 4, 4)
 
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
         self.lbl_mat_name = QLabel("(No Multi/Sub-Object Selected)", self)
         self.lbl_mat_name.setObjectName("matTitle")
+        self.lbl_mat_name.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
         self.lbl_slot_count = QLabel("Select a Multi-Material node in SME or an object in viewport", self)
         self.lbl_slot_count.setObjectName("slotCountLabel")
+        self.lbl_slot_count.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
         info_layout.addWidget(self.lbl_mat_name)
         info_layout.addWidget(self.lbl_slot_count)
         header_layout.addLayout(info_layout, 1)
 
-        main_layout.addWidget(header_frame)
+        main_layout.addWidget(self.header_frame)
 
         self.table = ReorderableTableWidget(self)
         self.table.setColumnCount(6)
@@ -1434,6 +1447,8 @@ class MultiMaterialManagerUI(QDialog):
         self.table.setRowCount(0)
         self.lbl_mat_name.setText("(No Multi/Sub-Object Selected)")
         self.lbl_slot_count.setText("Select a Multi-Material node in SME or an object in viewport")
+        if hasattr(self, 'header_frame'):
+            self.header_frame.setToolTip("Select a Multi-Material node in SME or an object in viewport")
         self.set_status("● Live Sync: Waiting for selection...")
         self.is_loading = False
 
@@ -1474,6 +1489,8 @@ class MultiMaterialManagerUI(QDialog):
 
             self.lbl_mat_name.setText(mat_name)
             self.lbl_slot_count.setText("Slots: {} | Used in scene: {} object(s)".format(num_subs, len(scene_objs)))
+            if hasattr(self, 'header_frame'):
+                self.header_frame.setToolTip("Click to open and select '{}' in Slate Material Editor".format(mat_name))
 
             self.slots_data = []
             self.initial_id_map = {}
@@ -1533,6 +1550,8 @@ class MultiMaterialManagerUI(QDialog):
         ]
         self.lbl_mat_name.setText("Mock_MultiMaterial_Demo")
         self.lbl_slot_count.setText("Slots: 5 (Test Mode)")
+        if hasattr(self, 'header_frame'):
+            self.header_frame.setToolTip("Click to open and select 'Mock_MultiMaterial_Demo' in Slate Material Editor")
         self.populate_table()
         self.is_loading = False
 
@@ -1753,6 +1772,27 @@ class MultiMaterialManagerUI(QDialog):
                 self.set_status("● Error opening Slate Material Editor")
         else:
             self.set_status("● Slate Editor: Focused '{}' (Test Mode)".format(slot.get('sub_mat_name', 'Material')))
+
+    def open_target_material_in_sme(self):
+        if not self.target_material:
+            return
+        if rt:
+            try:
+                if not hasattr(rt, '_jsh_MMM_OpenInSME') or rt._jsh_MMM_OpenInSME is None:
+                    init_maxscript_helpers()
+
+                success = bool(rt._jsh_MMM_OpenInSME(self.target_material))
+                mat_name = getattr(self.target_material, 'name', 'MultiMaterial')
+                if success:
+                    self.set_status("● Slate Editor: Focused '{}'".format(mat_name))
+                else:
+                    self.set_status("● Slate Material Editor opened")
+            except Exception as e:
+                print("Error opening material in SME: {}".format(e))
+                self.set_status("● Error opening Slate Material Editor")
+        else:
+            mat_name = self.lbl_mat_name.text()
+            self.set_status("● Slate Editor: Focused '{}' (Test Mode)".format(mat_name))
 
     def pick_slot_color(self, row):
         if row < 0 or row >= len(self.slots_data):

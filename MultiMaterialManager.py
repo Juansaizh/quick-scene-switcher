@@ -1571,7 +1571,7 @@ class MultiMaterialManagerUI(QDialog):
         self.setWindowTitle("Multi-Material Manager")
         self.resize(750, 570)
         self.setMinimumSize(620, 420)
-        self.setWindowFlags(self.windowFlags() | Qt.Window)
+        self.setWindowFlags((self.windowFlags() | Qt.Window) & ~Qt.WindowContextHelpButtonHint)
 
         self.setup_style()
         self.init_ui()

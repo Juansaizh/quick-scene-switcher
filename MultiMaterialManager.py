@@ -531,7 +531,7 @@ def init_maxscript_helpers():
     )
 
     fn _jsh_MMM_ApplyMultiMatData mat count subMats names ids enableds = (
-        if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
+        if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) or count < 1 do return false
         
         while mat.materialList.count > count do (
             deleteItem mat.materialList mat.materialList.count
@@ -2529,6 +2529,9 @@ class MultiMaterialManagerUI(QDialog):
     def remove_selected_slot(self):
         if not self.target_material:
             return
+        if len(self.slots_data) <= 1:
+            QMessageBox.information(self, "Remove Slot", "A Multi-Material must have at least one slot. Cannot remove the last remaining slot.")
+            return
         selected_row = self.table.currentRow()
         if selected_row < 0 or selected_row >= len(self.slots_data):
             QMessageBox.warning(self, "No Selection", "Please select a slot row to remove.")
@@ -2617,6 +2620,10 @@ class MultiMaterialManagerUI(QDialog):
         initial_count = len(self.slots_data)
         cleaned = [s for s in self.slots_data if s['sub_mat'] is not None]
 
+        if len(cleaned) == 0:
+            QMessageBox.information(self, "Clean Empty Slots", "Cannot clean all slots. At least one slot must remain in the Multi-Material.")
+            return
+
         if len(cleaned) == initial_count:
             QMessageBox.information(self, "Clean Empty Slots", "No empty slots found to clean.")
             return
@@ -2638,14 +2645,15 @@ class MultiMaterialManagerUI(QDialog):
 
     def update_button_states(self):
         has_mat = bool(self.target_material is not None and len(self.slots_data) > 0)
+        can_remove = bool(self.target_material is not None and len(self.slots_data) > 1)
         if hasattr(self, 'btn_add'):
             self.btn_add.setEnabled(has_mat)
         if hasattr(self, 'btn_remove'):
-            self.btn_remove.setEnabled(has_mat)
+            self.btn_remove.setEnabled(can_remove)
         if hasattr(self, 'btn_duplicate'):
             self.btn_duplicate.setEnabled(has_mat)
         if hasattr(self, 'btn_clean_empty'):
-            self.btn_clean_empty.setEnabled(has_mat)
+            self.btn_clean_empty.setEnabled(can_remove)
 
         has_geo_sel = False
         if has_mat and len(self.slots_data) > 1 and rt:

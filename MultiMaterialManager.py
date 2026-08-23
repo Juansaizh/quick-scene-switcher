@@ -604,7 +604,7 @@ def init_maxscript_helpers():
             -- Fast, direct in-memory method for collapsed Editable_Poly / Editable_Mesh
             local target = if (isProperty obj #baseObject and isValidObj obj.baseObject) then obj.baseObject else obj
             local isPoly = (isKindOf target Editable_Poly or isKindOf obj Editable_Poly)
-            local isMesh = (isKindOf target Editable_Mesh or isKindOf obj Editable_Mesh)
+            local isMesh = (isKindOf target Editable_Mesh or isKindOf obj Editable_Mesh or isKindOf target TriMeshGeometry or isKindOf obj TriMeshGeometry)
             
             if isPoly then (
                 local polyObj = if isKindOf target Editable_Poly then target else obj
@@ -628,24 +628,33 @@ def init_maxscript_helpers():
                     try ( update obj ) catch()
                 )
             ) else if isMesh then (
-                local meshObj = if isKindOf target Editable_Mesh then target else obj
                 with redraw off (
+                    local numF = getNumFaces obj
                     local pending = #()
                     for i = 1 to oldIDs.count do (
                         local oID = oldIDs[i]
                         local nID = newIDs[i]
                         if oID != nID do (
-                            local ba = meshop.getFacesByMatID meshObj oID
+                            local ba = #{}
+                            try (
+                                ba = meshop.getFacesByMatID obj oID
+                            ) catch()
+                            if ba.isEmpty do (
+                                for f = 1 to numF do (
+                                    if (getFaceMatID obj f) == oID do ba[f] = true
+                                )
+                            )
                             if not ba.isEmpty do append pending #(nID, ba)
                         )
                     )
                     for change in pending do (
                         local nID = change[1]
                         local ba = change[2]
-                        setFaceMatID meshObj ba nID
+                        for f in ba do (
+                            setFaceMatID obj f nID
+                        )
                         count += ba.numberSet
                     )
-                    try ( update meshObj ) catch()
                     try ( update obj ) catch()
                 )
             ) else (
@@ -673,12 +682,19 @@ def init_maxscript_helpers():
                     append result #(matID, ba.numberSet)
                 )
             )
-        ) else if isKindOf target Editable_Mesh or isKindOf obj Editable_Mesh then (
-            local meshObj = if isKindOf target Editable_Mesh then target else obj
-            for matID = 1 to 256 do (
-                local ba = meshop.getFacesByMatID meshObj matID
-                if not ba.isEmpty do (
-                    append result #(matID, ba.numberSet)
+        ) else if isKindOf target Editable_Mesh or isKindOf obj Editable_Mesh or isKindOf target TriMeshGeometry or isKindOf obj TriMeshGeometry then (
+            local numF = getNumFaces obj
+            local counts = #()
+            for f = 1 to numF do (
+                local id = getFaceMatID obj f
+                if id != undefined and id > 0 do (
+                    while counts.count < id do append counts 0
+                    counts[id] += 1
+                )
+            )
+            for matID = 1 to counts.count do (
+                if counts[matID] != undefined and counts[matID] > 0 do (
+                    append result #(matID, counts[matID])
                 )
             )
         ) else (

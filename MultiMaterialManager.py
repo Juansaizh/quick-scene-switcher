@@ -25,6 +25,7 @@ import sys
 import os
 import time
 import math
+import copy
 import traceback
 try:
     import configparser
@@ -482,6 +483,37 @@ def init_maxscript_helpers():
         result
     )
 
+    fn _jsh_MMM_GetSubMaterialColor subMat = (
+        if subMat == undefined or not isValidObj subMat do return undefined
+        local col = undefined
+        try (
+            if isProperty subMat #diffuse then col = subMat.diffuse
+            else if isProperty subMat #diffuseColor then col = subMat.diffuseColor
+            else if isProperty subMat #base_color then col = subMat.base_color
+            else if isProperty subMat #baseColor then col = subMat.baseColor
+            else if isProperty subMat #color then col = subMat.color
+            else if isProperty subMat #wireColor then col = subMat.wireColor
+        ) catch()
+        col
+    )
+
+    fn _jsh_MMM_AreSubMaterialsIdentical m1 m2 = (
+        if m1 == undefined or m2 == undefined do return false
+        if m1 == m2 do return true
+        try (
+            if (getHandleByAnim m1) == (getHandleByAnim m2) do return true
+        ) catch()
+        if (classOf m1) != (classOf m2) do return false
+        if (m1.name as string) != (m2.name as string) do return false
+        
+        local c1 = _jsh_MMM_GetSubMaterialColor m1
+        local c2 = _jsh_MMM_GetSubMaterialColor m2
+        if c1 != undefined and c2 != undefined do (
+            if (c1.r as integer) != (c2.r as integer) or (c1.g as integer) != (c2.g as integer) or (c1.b as integer) != (c2.b as integer) do return false
+        )
+        return true
+    )
+
     fn _jsh_MMM_SetSubMaterialColor subMat r g b = (
         if subMat == undefined or not isValidObj subMat do return false
         local newCol = color r g b
@@ -571,6 +603,44 @@ def init_maxscript_helpers():
         )
     )
 
+    fn _jsh_MMM_ClearSubObjectSelection obj = (
+        if obj == undefined or not isValidNode obj do return ()
+        try ( setCommandPanelTaskMode #create ) catch()
+        try (
+            if isKindOf obj Editable_Poly or (isProperty obj #baseObject and isKindOf obj.baseObject Editable_Poly) do (
+                polyop.setFaceSelection obj #{}
+                polyop.setEdgeSelection obj #{}
+                polyop.setVertSelection obj #{}
+            )
+        ) catch()
+        try (
+            if isKindOf obj Editable_Mesh or (isProperty obj #baseObject and isKindOf obj.baseObject Editable_Mesh) or isKindOf obj TriMeshGeometry do (
+                setFaceSelection obj #{}
+                try ( setFaceSelection obj.baseObject #{} ) catch()
+                setEdgeSelection obj #{}
+                try ( setEdgeSelection obj.baseObject #{} ) catch()
+                setVertSelection obj #{}
+                try ( setVertSelection obj.baseObject #{} ) catch()
+            )
+        ) catch()
+        try (
+            if isProperty obj #modifiers do (
+                for m in obj.modifiers do (
+                    if isKindOf m Edit_Poly do (
+                        try ( m.SetSelection #Face #{} ) catch()
+                        try ( m.SetSelection #Vertex #{} ) catch()
+                        try ( m.SetSelection #Edge #{} ) catch()
+                    )
+                    if isKindOf m Edit_Mesh do (
+                        try ( setFaceSelection obj m #{} ) catch()
+                        try ( setEdgeSelection obj m #{} ) catch()
+                        try ( setVertSelection obj m #{} ) catch()
+                    )
+                )
+            )
+        ) catch()
+    )
+
     fn _jsh_MMM_UpdateEditPolyFaceIDs obj epMod oldIDs newIDs = (
         if obj == undefined or not isValidNode obj or epMod == undefined do return 0
         local count = 0
@@ -586,6 +656,11 @@ def init_maxscript_helpers():
             if selection.count != 1 or selection[1] != obj do select obj
             if modPanel.getCurrentObject() != epMod do modPanel.setCurrentObject epMod
             subObjectLevel = 4
+            
+            -- Ensure any existing sub-object selections are cleared
+            try ( epMod.SetSelection #Face #{} ) catch()
+            try ( epMod.SetSelection #Vertex #{} ) catch()
+            try ( epMod.SetSelection #Edge #{} ) catch()
             
             -- Step 1: Pre-collect static face bitarrays for all changing oldIDs BEFORE any modifications
             local pending = #()
@@ -652,6 +727,9 @@ def init_maxscript_helpers():
         if obj == undefined or not isValidNode obj do return 0
         local count = 0
         
+        -- Clear any active sub-object polygon/element/vertex selections
+        _jsh_MMM_ClearSubObjectSelection obj
+        
         local hasModifiers = (isProperty obj #modifiers and obj.modifiers.count > 0)
         
         if hasModifiers then (
@@ -698,13 +776,8 @@ def init_maxscript_helpers():
                         local nID = newIDs[i]
                         if oID != nID do (
                             local ba = #{}
-                            try (
-                                ba = meshop.getFacesByMatID obj oID
-                            ) catch()
-                            if ba.isEmpty do (
-                                for f = 1 to numF do (
-                                    if (getFaceMatID obj f) == oID do ba[f] = true
-                                )
+                            for f = 1 to numF do (
+                                if (getFaceMatID obj f) == oID do ba[f] = true
                             )
                             if not ba.isEmpty do append pending #(nID, ba)
                         )
@@ -865,17 +938,23 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
         col = index.column()
         rect = option.rect
 
-        if option.state & QtWidgets.QStyle.State_Selected:
-            painter.fillRect(rect, QColor(30, 73, 118))
-        else:
-            bg = QColor(82, 82, 82) if (row % 2 == 1) else QColor(72, 72, 72)
-            painter.fillRect(rect, bg)
-
         main_ui = self.table.window()
         if not hasattr(main_ui, 'slots_data') or row >= len(main_ui.slots_data):
             painter.restore()
             return
         slot = main_ui.slots_data[row]
+
+        preview_groups = getattr(main_ui, '_preview_duplicate_groups', None)
+        in_dup_preview = bool(preview_groups and (row in preview_groups))
+
+        if option.state & QtWidgets.QStyle.State_Selected:
+            painter.fillRect(rect, QColor(30, 73, 118))
+        elif in_dup_preview:
+            bg = QColor(95, 60, 24) if (row % 2 == 1) else QColor(80, 48, 18)
+            painter.fillRect(rect, bg)
+        else:
+            bg = QColor(82, 82, 82) if (row % 2 == 1) else QColor(72, 72, 72)
+            painter.fillRect(rect, bg)
 
         if col == 0:
             painter.setFont(QFont("Segoe UI", 9, QFont.Bold))
@@ -959,6 +1038,18 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
             else:
                 painter.setPen(QPen(QColor(130, 130, 130)))
             painter.drawText(rect, Qt.AlignCenter, used_text)
+
+        if in_dup_preview:
+            grp_id = preview_groups[row]
+            painter.setPen(QPen(QColor(230, 126, 34), 1.5))
+            if col == 0:
+                painter.drawLine(rect.left(), rect.top(), rect.left(), rect.bottom())
+            if col == 5:
+                painter.drawLine(rect.right(), rect.top(), rect.right(), rect.bottom())
+            if row == 0 or preview_groups.get(row - 1) != grp_id:
+                painter.drawLine(rect.left(), rect.top(), rect.right(), rect.top())
+            if row == len(main_ui.slots_data) - 1 or preview_groups.get(row + 1) != grp_id:
+                painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.bottom())
 
         painter.restore()
 
@@ -1384,6 +1475,8 @@ class MultiMaterialManagerUI(QDialog):
         self.slots_data = []
         self.initial_id_map = {}
         self._duplicate_ids = set()
+        self._preview_duplicate_groups = None
+        self._backup_slots_data = None
         self.is_loading = False
 
         self.setWindowTitle("Multi-Material Manager")
@@ -1426,6 +1519,19 @@ class MultiMaterialManagerUI(QDialog):
                 color: #dedede;
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-size: 12px;
+            }
+            QMessageBox {
+                background-color: #444444;
+            }
+            QMessageBox QLabel {
+                font-size: 13px;
+                color: #f0f0f0;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QMessageBox QPushButton {
+                min-width: 78px;
+                font-size: 12px;
+                padding: 6px 14px;
             }
             QFrame#headerFrame {
                 background-color: transparent;
@@ -1499,6 +1605,26 @@ class MultiMaterialManagerUI(QDialog):
             }
             QPushButton:pressed {
                 background-color: #3a3a3a;
+            }
+            QPushButton:disabled {
+                background-color: #3b3b3b;
+                color: #777777;
+                border-color: #484848;
+            }
+            QPushButton#btnFixDuplicates {
+                background-color: #484848;
+                color: #dedede;
+                border: 1px solid #686868;
+            }
+            QPushButton#btnFixDuplicates:hover {
+                background-color: #5c452b;
+                border-color: #e67e22;
+                color: #ffffff;
+            }
+            QPushButton#btnFixDuplicates:disabled {
+                background-color: #3b3b3b;
+                color: #777777;
+                border-color: #484848;
             }
             QPushButton#btnApply {
                 background-color: #1e9bfd;
@@ -1638,6 +1764,12 @@ class MultiMaterialManagerUI(QDialog):
 
         tools_layout.addStretch(1)
 
+        self.btn_fix_duplicates = QPushButton("Fix Duplicates", self)
+        self.btn_fix_duplicates.setObjectName("btnFixDuplicates")
+        self.btn_fix_duplicates.setToolTip("Find duplicate sub-materials (e.g. from Attach), merge them into single slots, and remap geometry face IDs")
+        self.btn_fix_duplicates.clicked.connect(self.fix_duplicates)
+        tools_layout.addWidget(self.btn_fix_duplicates)
+
         main_layout.addLayout(tools_layout)
 
         options_layout = QHBoxLayout()
@@ -1753,8 +1885,12 @@ class MultiMaterialManagerUI(QDialog):
     def check_selection_and_material_changes(self):
         if not rt or self.is_loading:
             return
+        if self._preview_duplicate_groups is not None:
+            return
         if self.table._is_dragging or self.table.state() == QAbstractItemView.EditingState:
             return
+
+        self.update_button_states()
 
         try:
             detected_mat = rt._jsh_MMM_GetSelectedMultiMaterial()
@@ -1803,6 +1939,8 @@ class MultiMaterialManagerUI(QDialog):
         self._last_fingerprint = ""
         self.slots_data = []
         self.initial_id_map = {}
+        self._preview_duplicate_groups = None
+        self._backup_slots_data = None
         self.is_loading = True
         self.table.setRowCount(0)
         self.lbl_mat_name.setText("(No Multi/Sub-Object Selected)")
@@ -1810,6 +1948,7 @@ class MultiMaterialManagerUI(QDialog):
         if hasattr(self, 'header_frame'):
             self.header_frame.setToolTip("Select a Multi-Material node in SME or an object in viewport")
         self.set_status("● Live Sync: Waiting for selection...")
+        self.update_button_states()
         self.is_loading = False
 
     def load_material(self, mat):
@@ -2135,6 +2274,7 @@ class MultiMaterialManagerUI(QDialog):
 
             self.table.setRowHeight(row, 31)
 
+        self.update_button_states()
         self.is_loading = False
 
     def on_table_cell_clicked(self, row, column):
@@ -2495,6 +2635,276 @@ class MultiMaterialManagerUI(QDialog):
                 self.sync_to_max("Clean Empty Slots", update_geom=True)
             else:
                 self.set_status("● Paused: Cleaned empty slots")
+
+    def update_button_states(self):
+        has_mat = bool(self.target_material is not None and len(self.slots_data) > 0)
+        if hasattr(self, 'btn_add'):
+            self.btn_add.setEnabled(has_mat)
+        if hasattr(self, 'btn_remove'):
+            self.btn_remove.setEnabled(has_mat)
+        if hasattr(self, 'btn_duplicate'):
+            self.btn_duplicate.setEnabled(has_mat)
+        if hasattr(self, 'btn_clean_empty'):
+            self.btn_clean_empty.setEnabled(has_mat)
+
+        has_geo_sel = False
+        if has_mat and len(self.slots_data) > 1 and rt:
+            try:
+                sel_count = int(rt.selection.count)
+                if sel_count > 0:
+                    for obj in rt.selection:
+                        if hasattr(obj, 'material') and obj.material == self.target_material:
+                            has_geo_sel = True
+                            break
+            except Exception:
+                has_geo_sel = False
+
+        if hasattr(self, 'btn_fix_duplicates'):
+            self.btn_fix_duplicates.setEnabled(has_geo_sel)
+            if not has_geo_sel:
+                if not has_mat or len(self.slots_data) <= 1:
+                    self.btn_fix_duplicates.setToolTip("Fix Duplicates requires a Multi-Material with at least 2 slots")
+                else:
+                    self.btn_fix_duplicates.setToolTip("Select at least one geometry object in viewport using this material to enable Fix Duplicates")
+            else:
+                self.btn_fix_duplicates.setToolTip("Find duplicate sub-materials (e.g. from Attach), merge them into single slots, and remap geometry face IDs")
+
+    def find_duplicate_material_groups(self):
+        """Scans self.slots_data and returns a list of duplicate groups."""
+        if not self.slots_data or len(self.slots_data) < 2:
+            return []
+
+        visited = set()
+        groups = []
+
+        for i in range(len(self.slots_data)):
+            if i in visited:
+                continue
+            slot_a = self.slots_data[i]
+            sub_a = slot_a.get('sub_mat')
+            if sub_a is None or str(sub_a) == "undefined":
+                continue
+
+            current_group = [i]
+            for j in range(i + 1, len(self.slots_data)):
+                if j in visited:
+                    continue
+                slot_b = self.slots_data[j]
+                sub_b = slot_b.get('sub_mat')
+                if sub_b is None or str(sub_b) == "undefined":
+                    continue
+
+                is_dup = False
+                if rt and hasattr(rt, '_jsh_MMM_AreSubMaterialsIdentical'):
+                    try:
+                        is_dup = bool(rt._jsh_MMM_AreSubMaterialsIdentical(sub_a, sub_b))
+                    except Exception:
+                        is_dup = False
+
+                if not is_dup:
+                    same_class = (slot_a.get('sub_mat_class') == slot_b.get('sub_mat_class') and slot_a.get('sub_mat_class') not in ('None', None, ''))
+                    same_name = (slot_a.get('sub_mat_name') == slot_b.get('sub_mat_name') and slot_a.get('sub_mat_name') not in ('None', None, ''))
+                    same_color = True
+                    col_a = slot_a.get('color')
+                    col_b = slot_b.get('color')
+                    if col_a and col_b and col_a.isValid() and col_b.isValid():
+                        same_color = (col_a.rgb() == col_b.rgb())
+                    is_dup = same_class and same_name and same_color
+
+                if is_dup:
+                    current_group.append(j)
+                    visited.add(j)
+
+            if len(current_group) > 1:
+                visited.add(i)
+                groups.append({
+                    'master_idx': current_group[0],
+                    'dup_indices': current_group[1:],
+                    'all_indices': current_group,
+                    'name': slot_a.get('sub_mat_name', slot_a.get('name', 'Material')),
+                    'class': slot_a.get('sub_mat_class', ''),
+                    'color': slot_a.get('color')
+                })
+
+        return groups
+
+    def fix_duplicates(self):
+        if not self.target_material or not rt:
+            return
+
+        # Collect selected objects using this material and clear sub-object mode
+        selected_objs = []
+        try:
+            for obj in rt.selection:
+                if hasattr(obj, 'material') and obj.material == self.target_material:
+                    selected_objs.append(obj)
+        except Exception:
+            selected_objs = []
+
+        all_objs_using_mat = self.get_objects_using_material(self.target_material)
+        if not selected_objs:
+            selected_objs = all_objs_using_mat
+
+        for obj in selected_objs:
+            try:
+                rt._jsh_MMM_ClearSubObjectSelection(obj)
+            except Exception:
+                pass
+
+        groups = self.find_duplicate_material_groups()
+        if not groups:
+            QMessageBox.information(self, "Fix Duplicates", "No duplicate sub-materials found in the active Multi-Material.")
+            return
+
+        # 1. Visual Grouping Preview: Backup original slots_data snapshot
+        self._backup_slots_data = [dict(s) for s in self.slots_data]
+
+        # Build reordered slots_data with duplicate groups placed contiguously
+        preview_slots = []
+        preview_group_map = {}
+        used_original_indices = set()
+
+        for g_idx, group in enumerate(groups):
+            for orig_idx in group['all_indices']:
+                new_row = len(preview_slots)
+                preview_slots.append(dict(self.slots_data[orig_idx]))
+                preview_group_map[new_row] = g_idx
+                used_original_indices.add(orig_idx)
+
+        for idx, s in enumerate(self.slots_data):
+            if idx not in used_original_indices:
+                preview_slots.append(dict(s))
+
+        self.slots_data = preview_slots
+        self._preview_duplicate_groups = preview_group_map
+        self.populate_table()
+        self.table.viewport().update()
+
+        # 2. Brief confirmation message
+        is_shared = (len(all_objs_using_mat) > len(selected_objs))
+        total_redundant = sum(len(g['dup_indices']) for g in groups)
+        group_count = len(groups)
+        group_str = "{} duplicate material group".format(group_count) if group_count == 1 else "{} duplicate material groups".format(group_count)
+        
+        dialog_text = "Found {}.\nDo you want to merge them?".format(group_str)
+
+        reply = QMessageBox.question(
+            self,
+            "Fix Duplicate Sub-Materials",
+            dialog_text,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply != QMessageBox.Yes:
+            # Revert preview table ordering and highlights
+            self.slots_data = self._backup_slots_data
+            self._preview_duplicate_groups = None
+            self._backup_slots_data = None
+            self.populate_table()
+            self.set_status("● Fix Duplicates cancelled")
+            return
+
+        # 3. Execution: Clear preview highlights
+        self._preview_duplicate_groups = None
+        orig_slots = self._backup_slots_data
+        self._backup_slots_data = None
+
+        if not selected_objs:
+            selected_objs = all_objs_using_mat
+
+        rt.theHold.Begin()
+        try:
+            # Material Isolation: If shared with unselected objects, clone the MultiMaterial
+            if is_shared:
+                try:
+                    if hasattr(rt, '_jsh_MMM_CloneMaterial'):
+                        cloned_mat = rt._jsh_MMM_CloneMaterial(self.target_material)
+                    else:
+                        cloned_mat = rt.copy(self.target_material)
+                    if cloned_mat and str(cloned_mat) != "undefined":
+                        for obj in selected_objs:
+                            try:
+                                obj.material = cloned_mat
+                            except Exception:
+                                pass
+                        self.target_material = cloned_mat
+                except Exception as clone_err:
+                    print("Error cloning MultiMaterial for isolation: {}".format(clone_err))
+
+            # Build direct end-to-end remap map: {original_slot_id -> final_slot_id}
+            dup_indices_set = set()
+            for g in groups:
+                for d_idx in g['dup_indices']:
+                    dup_indices_set.add(d_idx)
+
+            condensed_slots = []
+            for idx, s in enumerate(orig_slots):
+                if idx not in dup_indices_set:
+                    condensed_slots.append(dict(s))
+
+            auto_renumber = self.chk_auto_renumber.isChecked()
+            master_orig_id_to_final_id = {}
+            for new_idx, s in enumerate(condensed_slots):
+                orig_id = s.get('id')
+                if auto_renumber:
+                    final_id = new_idx + 1
+                    s['id'] = final_id
+                else:
+                    final_id = orig_id
+                master_orig_id_to_final_id[orig_id] = final_id
+
+            remap_map = {}
+            for s in orig_slots:
+                orig_id = s.get('id')
+                if orig_id in master_orig_id_to_final_id:
+                    remap_map[orig_id] = master_orig_id_to_final_id[orig_id]
+
+            for g in groups:
+                master_orig_slot = orig_slots[g['master_idx']]
+                master_orig_id = master_orig_slot.get('id')
+                final_target_id = master_orig_id_to_final_id.get(master_orig_id, master_orig_id)
+                for d_idx in g['dup_indices']:
+                    d_orig_slot = orig_slots[d_idx]
+                    d_orig_id = d_orig_slot.get('id')
+                    remap_map[d_orig_id] = final_target_id
+
+            old_ids = list(remap_map.keys())
+            new_ids = [remap_map[k] for k in old_ids]
+
+            has_id_changes = any(o != n for o, n in zip(old_ids, new_ids))
+            if has_id_changes:
+                for obj in selected_objs:
+                    try:
+                        rt._jsh_MMM_UpdateFaceIDs(obj, old_ids, new_ids)
+                    except Exception as geo_err:
+                        print("Error updating face IDs on {}: {}".format(getattr(obj, 'name', 'object'), geo_err))
+
+            self.slots_data = condensed_slots
+            sub_mats = [s.get('sub_mat') for s in self.slots_data]
+            names = [s.get('name', '') for s in self.slots_data]
+            ids = [s.get('id', i + 1) for i, s in enumerate(self.slots_data)]
+            enableds = [s.get('enabled', True) for s in self.slots_data]
+
+            rt._jsh_MMM_ApplyMultiMatData(self.target_material, len(self.slots_data), sub_mats, names, ids, enableds)
+
+            rt.theHold.Accept("Fix Duplicate Sub-Materials")
+
+            try:
+                self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
+            except Exception:
+                pass
+
+            self.load_material(self.target_material)
+            self.set_status("● Successfully merged {} duplicate slot(s)".format(total_redundant))
+
+        except Exception as err:
+            rt.theHold.Cancel()
+            print("Error executing Fix Duplicates: {}".format(err))
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", "An error occurred while merging duplicates:\n{}".format(err))
+            self.slots_data = orig_slots
+            self.populate_table()
 
 
 def show_ui(target_material=None):

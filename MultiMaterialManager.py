@@ -1581,7 +1581,7 @@ class MultiMaterialManagerUI(QDialog):
                 padding: 6px 8px;
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 14px;
                 border: none;
                 border-bottom: 1px solid #4f4f4f;
             }
@@ -1593,11 +1593,11 @@ class MultiMaterialManagerUI(QDialog):
                 color: #dedede;
                 border: 1px solid #686868;
                 border-radius: 4px;
-                padding: 6px 12px;
+                padding: 6px 14px;
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-weight: 500;
-                font-size: 12px;
-                min-height: 20px;
+                font-size: 14px;
+                min-height: 22px;
             }
             QPushButton:hover {
                 background-color: #5f5f5f;
@@ -1631,7 +1631,7 @@ class MultiMaterialManagerUI(QDialog):
                 color: #ffffff;
                 border: 1px solid #168de6;
                 font-weight: bold;
-                font-size: 13px;
+                font-size: 14px;
                 padding: 7px 18px;
             }
             QPushButton#btnApply:hover {
@@ -1642,9 +1642,9 @@ class MultiMaterialManagerUI(QDialog):
             }
             QCheckBox {
                 color: #d0d0d0;
-                spacing: 7px;
+                spacing: 8px;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                font-size: 12px;
+                font-size: 14px;
             }
             QCheckBox::indicator {
                 width: 16px;
@@ -1843,7 +1843,7 @@ class MultiMaterialManagerUI(QDialog):
                     color: #5bb4f8;
                     font-family: 'Segoe UI', Arial, sans-serif;
                     font-weight: 500;
-                    font-size: 12px;
+                    font-size: 14px;
                     text-align: left;
                     padding: 4px 6px;
                 }
@@ -1864,7 +1864,7 @@ class MultiMaterialManagerUI(QDialog):
                     color: #ffc107;
                     font-family: 'Segoe UI', Arial, sans-serif;
                     font-weight: bold;
-                    font-size: 12px;
+                    font-size: 14px;
                     text-align: left;
                     padding: 4px 10px;
                 }

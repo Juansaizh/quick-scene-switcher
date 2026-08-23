@@ -26,6 +26,10 @@ import os
 import time
 import math
 import traceback
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 
 try:
     from PySide2 import QtWidgets, QtCore, QtGui
@@ -63,6 +67,64 @@ except ImportError:
         return None
 
 _CURRENT_JSH_MMM_DIALOG = None
+
+
+def get_config_file_path():
+    """Returns the path to the MultiMaterialManager.ini settings file in 3ds Max plugcfg or local directory."""
+    try:
+        if rt:
+            plugcfg_dir = str(rt.getDir(rt.name("plugcfg")))
+            if plugcfg_dir and os.path.isdir(plugcfg_dir):
+                return os.path.join(plugcfg_dir, "MultiMaterialManager.ini")
+    except Exception:
+        pass
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(script_dir, "MultiMaterialManager.ini")
+
+
+def load_config_settings():
+    """Loads checkbox and manager preferences from MultiMaterialManager.ini."""
+    ini_path = get_config_file_path()
+    settings = {
+        'auto_renumber_ids': True,
+        'sync_names': True,
+        'update_ids_on_geometry': False
+    }
+    if os.path.isfile(ini_path):
+        try:
+            config = configparser.ConfigParser()
+            config.read(ini_path, encoding='utf-8')
+            if config.has_section('Options'):
+                if config.has_option('Options', 'auto_renumber_ids'):
+                    settings['auto_renumber_ids'] = config.getboolean('Options', 'auto_renumber_ids', fallback=True)
+                if config.has_option('Options', 'sync_names'):
+                    settings['sync_names'] = config.getboolean('Options', 'sync_names', fallback=True)
+                if config.has_option('Options', 'update_ids_on_geometry'):
+                    settings['update_ids_on_geometry'] = config.getboolean('Options', 'update_ids_on_geometry', fallback=False)
+        except Exception as e:
+            print("[MultiMaterialManager] Error loading INI settings: {}".format(e))
+    return settings
+
+
+def save_config_settings(settings_dict):
+    """Saves checkbox and manager preferences to MultiMaterialManager.ini."""
+    ini_path = get_config_file_path()
+    try:
+        config = configparser.ConfigParser()
+        if os.path.isfile(ini_path):
+            try:
+                config.read(ini_path, encoding='utf-8')
+            except Exception:
+                pass
+        if not config.has_section('Options'):
+            config.add_section('Options')
+        for key, val in settings_dict.items():
+            config.set('Options', str(key), str(val))
+        with open(ini_path, 'w', encoding='utf-8') as f:
+            config.write(f)
+    except Exception as e:
+        print("[MultiMaterialManager] Error saving INI settings: {}".format(e))
+
 
 
 def linear_to_srgb_color(r, g, b):
@@ -1342,7 +1404,16 @@ class MultiMaterialManagerUI(QDialog):
         self._sync_timer.timeout.connect(self.check_selection_and_material_changes)
         self._sync_timer.start()
 
+    def save_checkbox_settings(self):
+        if hasattr(self, 'chk_auto_renumber') and hasattr(self, 'chk_sync_names') and hasattr(self, 'chk_update_faces'):
+            save_config_settings({
+                'auto_renumber_ids': self.chk_auto_renumber.isChecked(),
+                'sync_names': self.chk_sync_names.isChecked(),
+                'update_ids_on_geometry': self.chk_update_faces.isChecked()
+            })
+
     def closeEvent(self, event):
+        self.save_checkbox_settings()
         if hasattr(self, '_sync_timer') and self._sync_timer.isActive():
             self._sync_timer.stop()
         super(MultiMaterialManagerUI, self).closeEvent(event)
@@ -1572,19 +1643,24 @@ class MultiMaterialManagerUI(QDialog):
         options_layout = QHBoxLayout()
         options_layout.setSpacing(18)
 
+        config_settings = load_config_settings()
+
         self.chk_auto_renumber = QCheckBox("Auto-Renumber IDs", self)
-        self.chk_auto_renumber.setChecked(True)
+        self.chk_auto_renumber.setChecked(config_settings.get('auto_renumber_ids', True))
         self.chk_auto_renumber.setToolTip("Automatically renumbers Material IDs (1..N) according to slot order on drag & drop")
+        self.chk_auto_renumber.toggled.connect(self.save_checkbox_settings)
         options_layout.addWidget(self.chk_auto_renumber)
 
         self.chk_sync_names = QCheckBox("Sync Names", self)
-        self.chk_sync_names.setChecked(True)
+        self.chk_sync_names.setChecked(config_settings.get('sync_names', True))
         self.chk_sync_names.setToolTip("When editing slot names, automatically renames the assigned sub-material in 3ds Max")
+        self.chk_sync_names.toggled.connect(self.save_checkbox_settings)
         options_layout.addWidget(self.chk_sync_names)
 
         self.chk_update_faces = QCheckBox("Update IDs on Geometry", self)
-        self.chk_update_faces.setChecked(False)
+        self.chk_update_faces.setChecked(config_settings.get('update_ids_on_geometry', False))
         self.chk_update_faces.setToolTip("Reassigns face Material IDs on scene geometry to match updated slot positions")
+        self.chk_update_faces.toggled.connect(self.save_checkbox_settings)
         options_layout.addWidget(self.chk_update_faces)
 
         options_layout.addStretch(1)

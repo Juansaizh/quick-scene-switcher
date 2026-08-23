@@ -512,12 +512,17 @@ def init_maxscript_helpers():
     fn _jsh_MMM_UpdateEditPolyFaceIDs obj epMod oldIDs newIDs = (
         if obj == undefined or not isValidNode obj or epMod == undefined do return 0
         local count = 0
+        local maxHwnd = windows.getMAXHWND()
+        local origMode = getCommandPanelTaskMode()
         local prevSel = selection as array
         
+        -- Lock Windows repainting ONLY while manipulating Edit_Poly modifier UI
+        try ( windows.sendMessage maxHwnd 0x000B 0 0 ) catch()
+        
         try (
-            select obj
-            max modify mode
-            modPanel.setCurrentObject epMod
+            if (getCommandPanelTaskMode() != #modify) do setCommandPanelTaskMode #modify
+            if selection.count != 1 or selection[1] != obj do select obj
+            if modPanel.getCurrentObject() != epMod do modPanel.setCurrentObject epMod
             subObjectLevel = 4
             
             -- Step 1: Pre-collect static face bitarrays for all changing oldIDs BEFORE any modifications
@@ -563,9 +568,20 @@ def init_maxscript_helpers():
             format "Error updating Edit_Poly Face IDs: %\n" (getCurrentException())
         )
         
+        -- Restore original command panel mode and selection
+        try (
+            if origMode != undefined and (getCommandPanelTaskMode() != origMode) do (
+                setCommandPanelTaskMode origMode
+            )
+        ) catch()
+        
         try (
             if prevSel.count > 0 then select prevSel else clearSelection()
         ) catch()
+        
+        -- Unlock Windows repainting
+        try ( windows.sendMessage maxHwnd 0x000B 1 0 ) catch()
+        try ( completeRedraw() ) catch()
         
         count
     )
@@ -577,18 +593,15 @@ def init_maxscript_helpers():
         local hasModifiers = (isProperty obj #modifiers and obj.modifiers.count > 0)
         
         if hasModifiers then (
-            local ep = undefined
-            if isKindOf obj.modifiers[1] Edit_Poly do (
-                ep = obj.modifiers[1]
-            )
-            
+            local topMod = obj.modifiers[1]
+            local ep = if isKindOf topMod Edit_Poly then topMod else undefined
             if ep == undefined do (
                 ep = Edit_Poly()
                 addModifier obj ep
             )
-            
             count = _jsh_MMM_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
         ) else (
+            -- Fast, direct in-memory method for collapsed Editable_Poly / Editable_Mesh
             local target = if (isProperty obj #baseObject and isValidObj obj.baseObject) then obj.baseObject else obj
             local isPoly = (isKindOf target Editable_Poly or isKindOf obj Editable_Poly)
             local isMesh = (isKindOf target Editable_Mesh or isKindOf obj Editable_Mesh)
@@ -640,9 +653,9 @@ def init_maxscript_helpers():
                 addModifier obj ep
                 count = _jsh_MMM_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
             )
+            try ( redrawViews() ) catch()
         )
         
-        try ( completeRedraw() ) catch()
         count
     )
 

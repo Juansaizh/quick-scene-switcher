@@ -567,10 +567,11 @@ def init_maxscript_helpers():
                 local subMat = mat.materialList[slotIndex]
                 if subMat != undefined and isValidObj subMat do (
                     subMat.name = newName as string
+                    try ( notifyDependents subMat ) catch()
                 )
             )
-            notifyDependents mat
-            redrawViews()
+            try ( notifyDependents mat ) catch()
+            try ( redrawViews() ) catch()
             return true
         ) catch (
             return false
@@ -924,6 +925,30 @@ class CustomHeaderView(QHeaderView):
                 painter.restore()
 
 
+class CellEditorEnterFilter(QtCore.QObject):
+    def __init__(self, table, row, col, parent=None):
+        super(CellEditorEnterFilter, self).__init__(parent)
+        self.table = table
+        self.row = row
+        self.col = col
+
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.KeyPress and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            editor = obj
+            self.table.commitData(editor)
+            self.table.closeEditor(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+            next_row = self.row + 1
+            if next_row < self.table.rowCount():
+                def move_and_select():
+                    self.table.setCurrentCell(next_row, self.col)
+                    self.table.selectRow(next_row)
+                    target_idx = self.table.model().index(next_row, self.col)
+                    self.table.setCurrentIndex(target_idx)
+                QTimer.singleShot(10, move_and_select)
+            return True
+        return super(CellEditorEnterFilter, self).eventFilter(obj, event)
+
+
 class UnifiedTableItemDelegate(QStyledItemDelegate):
     def __init__(self, parent_table):
         super(UnifiedTableItemDelegate, self).__init__(parent_table)
@@ -1066,8 +1091,53 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
                         padding: 2px 4px;
                     }
                 """)
+                filter_obj = CellEditorEnterFilter(self.table, index.row(), index.column(), editor)
+                editor.installEventFilter(filter_obj)
             return editor
         return None
+
+    def setModelData(self, editor, model, index):
+        main_ui = self.table.window()
+        row = index.row()
+        col = index.column()
+
+        if col == 2 and isinstance(editor, QLineEdit):
+            new_name = editor.text().strip()
+            if hasattr(main_ui, 'slots_data') and row < len(main_ui.slots_data):
+                slot = main_ui.slots_data[row]
+                slot['name'] = new_name
+
+                # Check if Sync Names is active and sub-material exists
+                sync_sub = bool(hasattr(main_ui, 'chk_sync_names') and main_ui.chk_sync_names.isChecked() and slot.get('sub_mat') is not None)
+
+                if sync_sub and new_name:
+                    slot['sub_mat_name'] = new_name
+                    sub_text = new_name
+                    if slot.get('sub_mat_class') and slot['sub_mat_class'] != 'None':
+                        sub_text += "  ({})".format(slot['sub_mat_class'])
+                    sub_item = self.table.item(row, 3)
+                    if sub_item:
+                        sub_item.setText(sub_text)
+
+                if hasattr(main_ui, 'is_live_sync') and main_ui.is_live_sync and main_ui.target_material and rt:
+                    try:
+                        rt._jsh_MMM_SetSlotName(main_ui.target_material, row + 1, new_name, sync_sub)
+                        if sync_sub and new_name:
+                            main_ui.set_status("● Live Sync: Sub-material renamed to '{}'".format(new_name))
+                        else:
+                            main_ui.set_status("● Live Sync: Slot renamed to '{}'".format(new_name))
+                        try:
+                            main_ui._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(main_ui.target_material))
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        print("Error setting slot name: {}".format(e))
+                elif not (hasattr(main_ui, 'is_live_sync') and main_ui.is_live_sync):
+                    main_ui.set_status("● Paused: Slot renamed")
+
+                self.table.viewport().update()
+
+        super(UnifiedTableItemDelegate, self).setModelData(editor, model, index)
 
     def editorEvent(self, event, model, option, index):
         if index.column() == 4:
@@ -1133,6 +1203,25 @@ class ReorderableTableWidget(QTableWidget):
         self._scroll_timer.setInterval(140)
         self._scroll_timer.timeout.connect(self._handle_auto_scroll)
         self._scroll_direction = 0
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            curr_index = self.currentIndex()
+            if curr_index.isValid() and self.state() != QAbstractItemView.EditingState:
+                col = curr_index.column()
+                target_col = col if col in (0, 2) else 2
+                target_index = self.model().index(curr_index.row(), target_col)
+                self.setCurrentIndex(target_index)
+                self.edit(target_index)
+                event.accept()
+                return
+        elif event.key() == Qt.Key_Delete:
+            main_ui = self.window()
+            if hasattr(main_ui, 'remove_selected_slot'):
+                main_ui.remove_selected_slot()
+                event.accept()
+                return
+        super(ReorderableTableWidget, self).keyPressEvent(event)
 
     def leaveEvent(self, event):
         if self._hover_row != -1 or self._hover_col != -1:

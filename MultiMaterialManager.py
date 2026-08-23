@@ -520,38 +520,48 @@ def init_maxscript_helpers():
             modPanel.setCurrentObject epMod
             subObjectLevel = 4
             
-            local snapMesh = snapshotAsMesh obj
-            local numF = snapMesh.numfaces
-            
-            local pendingChanges = #()
+            -- Step 1: Pre-collect static face bitarrays for all changing oldIDs BEFORE any modifications
+            local pending = #()
             for i = 1 to oldIDs.count do (
                 local oID = oldIDs[i]
                 local nID = newIDs[i]
                 if oID != nID do (
                     local ba = #{}
-                    for f = 1 to numF do (
-                        if (getFaceMatID snapMesh f) == oID do ba[f] = true
+                    try (
+                        ba = polyop.getFacesByMatID obj oID
+                    ) catch()
+                    if ba.isEmpty do (
+                        try (
+                            epMod.selectByMaterialID = (oID - 1)
+                            epMod.ButtonOp #SelectByMaterial
+                            ba = epMod.GetSelection #Face
+                        ) catch()
                     )
                     if not ba.isEmpty do (
-                        append pendingChanges #(nID, ba)
+                        append pending #(nID, ba)
                     )
                 )
             )
             
-            for change in pendingChanges do (
+            -- Step 2: Apply the target newIDs directly to the pre-collected bitarrays using SetOperation & Commit
+            for change in pending do (
                 local nID = change[1]
                 local ba = change[2]
                 
-                epMod.SetSelection #Face ba
+                epMod.SetSelection #Face #{}
+                epMod.Select #Face ba
                 epMod.materialIDToSet = (nID - 1)
-                epMod.ButtonOp #SetMaterial
+                epMod.SetOperation #SetMaterial
+                epMod.Commit()
                 count += ba.numberSet
             )
             
             epMod.SetSelection #Face #{}
             subObjectLevel = 0
             
-        ) catch ()
+        ) catch (
+            format "Error updating Edit_Poly Face IDs: %\n" (getCurrentException())
+        )
         
         try (
             if prevSel.count > 0 then select prevSel else clearSelection()
@@ -564,14 +574,19 @@ def init_maxscript_helpers():
         if obj == undefined or not isValidNode obj do return 0
         local count = 0
         
-        local ep = undefined
-        if isProperty obj #modifiers do (
-            for m in obj.modifiers while ep == undefined do (
-                if isKindOf m Edit_Poly do ep = m
-            )
-        )
+        local hasModifiers = (isProperty obj #modifiers and obj.modifiers.count > 0)
         
-        if ep != undefined then (
+        if hasModifiers then (
+            local ep = undefined
+            if isKindOf obj.modifiers[1] Edit_Poly do (
+                ep = obj.modifiers[1]
+            )
+            
+            if ep == undefined do (
+                ep = Edit_Poly()
+                addModifier obj ep
+            )
+            
             count = _jsh_MMM_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
         ) else (
             local target = if (isProperty obj #baseObject and isValidObj obj.baseObject) then obj.baseObject else obj
@@ -581,18 +596,16 @@ def init_maxscript_helpers():
             if isPoly then (
                 local polyObj = if isKindOf target Editable_Poly then target else obj
                 with redraw off (
-                    local pendingChanges = #()
+                    local pending = #()
                     for i = 1 to oldIDs.count do (
                         local oID = oldIDs[i]
                         local nID = newIDs[i]
                         if oID != nID do (
                             local ba = polyop.getFacesByMatID polyObj oID
-                            if not ba.isEmpty do (
-                                append pendingChanges #(nID, ba)
-                            )
+                            if not ba.isEmpty do append pending #(nID, ba)
                         )
                     )
-                    for change in pendingChanges do (
+                    for change in pending do (
                         local nID = change[1]
                         local ba = change[2]
                         polyop.setFaceMatID polyObj ba nID
@@ -604,18 +617,16 @@ def init_maxscript_helpers():
             ) else if isMesh then (
                 local meshObj = if isKindOf target Editable_Mesh then target else obj
                 with redraw off (
-                    local pendingChanges = #()
+                    local pending = #()
                     for i = 1 to oldIDs.count do (
                         local oID = oldIDs[i]
                         local nID = newIDs[i]
                         if oID != nID do (
                             local ba = meshop.getFacesByMatID meshObj oID
-                            if not ba.isEmpty do (
-                                append pendingChanges #(nID, ba)
-                            )
+                            if not ba.isEmpty do append pending #(nID, ba)
                         )
                     )
-                    for change in pendingChanges do (
+                    for change in pending do (
                         local nID = change[1]
                         local ba = change[2]
                         setFaceMatID meshObj ba nID
@@ -625,9 +636,9 @@ def init_maxscript_helpers():
                     try ( update obj ) catch()
                 )
             ) else (
-                local newEP = Edit_Poly()
-                addModifier obj newEP
-                count = _jsh_MMM_UpdateEditPolyFaceIDs obj newEP oldIDs newIDs
+                local ep = Edit_Poly()
+                addModifier obj ep
+                count = _jsh_MMM_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
             )
         )
         

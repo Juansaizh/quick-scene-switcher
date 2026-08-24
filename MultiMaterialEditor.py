@@ -40,8 +40,8 @@ try:
         QMessageBox, QFrame, QSplitter, QWidget, QLineEdit, QSpinBox,
         QProgressBar, QToolTip, QColorDialog, QStyledItemDelegate
     )
-    from PySide2.QtCore import Qt, QSize, Signal, QPoint, QRect, QTimer
-    from PySide2.QtGui import QColor, QBrush, QPixmap, QIcon, QPainter, QFont, QPen
+    from PySide2.QtCore import Qt, QSize, Signal, QPoint, QRect, QRectF, QTimer
+    from PySide2.QtGui import QColor, QBrush, QPixmap, QIcon, QPainter, QFont, QPen, QPainterPath
 except ImportError:
     from PySide6 import QtWidgets, QtCore, QtGui
     from PySide6.QtWidgets import (
@@ -50,8 +50,8 @@ except ImportError:
         QMessageBox, QFrame, QSplitter, QWidget, QLineEdit, QSpinBox,
         QProgressBar, QToolTip, QColorDialog, QStyledItemDelegate
     )
-    from PySide6.QtCore import Qt, QSize, Signal, QPoint, QRect, QTimer
-    from PySide6.QtGui import QColor, QBrush, QPixmap, QIcon, QPainter, QFont, QPen
+    from PySide6.QtCore import Qt, QSize, Signal, QPoint, QRect, QRectF, QTimer
+    from PySide6.QtGui import QColor, QBrush, QPixmap, QIcon, QPainter, QFont, QPen, QPainterPath
 
 try:
     import pymxs
@@ -68,6 +68,56 @@ except ImportError:
         return None
 
 _CURRENT_JSH_MME_DIALOG = None
+
+
+def get_lock_icon(is_locked=False):
+    """Draws a crisp, vector padlock icon matching the requested design."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+
+    if is_locked:
+        # Locked: solid clean white closed padlock with subtle keyhole
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.setBrush(QBrush(QColor("#ffffff")))
+        painter.drawRoundedRect(6, 15, 20, 13, 2, 2)
+
+        # Closed white shackle
+        shackle_pen = QPen(QColor("#ffffff"), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(shackle_pen)
+        painter.setBrush(Qt.NoBrush)
+
+        path = QPainterPath()
+        path.moveTo(10, 15)
+        path.lineTo(10, 10)
+        path.arcTo(QRectF(10, 4, 12, 12), 180, -180)
+        path.lineTo(22, 15)
+        painter.drawPath(path)
+
+        # Keyhole
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(QColor("#2d2d2d")))
+        painter.drawEllipse(QPoint(16, 20), 2, 2)
+        painter.drawRect(15, 20, 2, 4)
+    else:
+        # Unlocked: hollow body with matching outline color, open shackle on left side
+        pen = QPen(QColor("#c5c5c5"), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+
+        # Hollow body (no fill, no keyhole)
+        painter.drawRoundedRect(6, 15, 20, 13, 2, 2)
+
+        # Open shackle: attached on right, wide opening on left
+        path = QPainterPath()
+        path.moveTo(21, 15)
+        path.lineTo(21, 10)
+        path.arcTo(QRectF(9, 3, 12, 12), 0, 120)
+        painter.drawPath(path)
+
+    painter.end()
+    return QIcon(pixmap)
 
 
 def get_config_file_path():
@@ -1647,6 +1697,7 @@ class MultiMaterialEditorUI(QDialog):
         self._backup_slots_data = None
         self._current_scene_objs_using_mat = []
         self._last_sel_handles = []
+        self.is_locked = False
         self.is_loading = False
 
         self.setWindowTitle("JSH | Multi-Material Editor")
@@ -1768,6 +1819,7 @@ class MultiMaterialEditorUI(QDialog):
                 font-weight: 500;
                 font-size: 14px;
                 min-height: 22px;
+                outline: none;
             }
             QPushButton:hover {
                 background-color: #5f5f5f;
@@ -1785,6 +1837,7 @@ class MultiMaterialEditorUI(QDialog):
                 background-color: #484848;
                 color: #dedede;
                 border: 1px solid #686868;
+                outline: none;
             }
             QPushButton#btnFixDuplicates:hover {
                 background-color: #5c452b;
@@ -1795,6 +1848,36 @@ class MultiMaterialEditorUI(QDialog):
                 background-color: #3b3b3b;
                 color: #777777;
                 border-color: #484848;
+            }
+            QPushButton#btnLock {
+                font-size: 15px;
+                padding: 0px;
+                min-width: 30px;
+                max-width: 30px;
+                min-height: 30px;
+                max-height: 30px;
+                border-radius: 4px;
+                background-color: #484848;
+                border: 1px solid #5a5a5a;
+                outline: none;
+            }
+            QPushButton#btnLock:hover {
+                background-color: #555555;
+                border: 1px solid #707070;
+            }
+            QPushButton#btnLock:pressed {
+                background-color: #383838;
+            }
+            QPushButton#btnLock:checked {
+                background-color: #484848;
+                border: 1px solid #5a5a5a;
+            }
+            QPushButton#btnLock:checked:hover {
+                background-color: #555555;
+                border: 1px solid #707070;
+            }
+            QPushButton#btnLock:checked:pressed {
+                background-color: #383838;
             }
             QPushButton#btnApply {
                 background-color: #1e9bfd;
@@ -1856,6 +1939,10 @@ class MultiMaterialEditorUI(QDialog):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
+        top_layout = QHBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(8)
+
         self.header_frame = QFrame(self)
         self.header_frame.setObjectName("headerFrame")
         self.header_frame.setCursor(Qt.PointingHandCursor)
@@ -1879,7 +1966,21 @@ class MultiMaterialEditorUI(QDialog):
         info_layout.addWidget(self.lbl_slot_count)
         header_layout.addLayout(info_layout, 1)
 
-        main_layout.addWidget(self.header_frame)
+        top_layout.addWidget(self.header_frame, 1)
+
+        self.btn_lock = QPushButton("", self)
+        self.btn_lock.setObjectName("btnLock")
+        self.btn_lock.setCheckable(True)
+        self.btn_lock.setChecked(False)
+        self.btn_lock.setFocusPolicy(Qt.NoFocus)
+        self.btn_lock.setFixedSize(30, 30)
+        self.btn_lock.setIcon(get_lock_icon(False))
+        self.btn_lock.setIconSize(QSize(18, 18))
+        self.btn_lock.setToolTip("Lock Material: OFF\nClick to lock the current material and prevent viewport selection changes from replacing it.")
+        self.btn_lock.clicked.connect(self.toggle_lock)
+        top_layout.addWidget(self.btn_lock, 0, Qt.AlignVCenter)
+
+        main_layout.addLayout(top_layout)
 
         self.table = ReorderableTableWidget(self)
         self.custom_header = CustomHeaderView(Qt.Horizontal, self.table)
@@ -2047,6 +2148,23 @@ class MultiMaterialEditorUI(QDialog):
         if hasattr(self, 'btn_toggle_sync') and self.btn_toggle_sync is not None and self.is_live_sync:
             self.btn_toggle_sync.setText(text)
 
+    def toggle_lock(self, checked=None):
+        if checked is None:
+            self.is_locked = not self.is_locked
+        else:
+            self.is_locked = bool(checked)
+
+        if hasattr(self, 'btn_lock') and self.btn_lock is not None:
+            self.btn_lock.setChecked(self.is_locked)
+            self.btn_lock.setIcon(get_lock_icon(self.is_locked))
+            if self.is_locked:
+                self.btn_lock.setToolTip("Lock Material: ON\nCurrent material is locked. Viewport selection changes will not replace it.\nClick to unlock.")
+            else:
+                self.btn_lock.setToolTip("Lock Material: OFF\nClick to lock the current material and prevent viewport selection changes from replacing it.")
+
+        if not self.is_locked and rt:
+            self.check_selection_and_material_changes()
+
     def check_selection_and_material_changes(self):
         if not rt or self.is_loading:
             return
@@ -2065,6 +2183,35 @@ class MultiMaterialEditorUI(QDialog):
         selection_changed = (current_sel_handles != self._last_sel_handles)
         self._last_sel_handles = current_sel_handles
 
+        # If material is locked and we already have a material loaded
+        if self.is_locked and self.target_material is not None:
+            try:
+                if not rt.isValidObj(self.target_material):
+                    self.clear_ui()
+                    return
+                current_fp = str(rt._jsh_MME_GetMatFingerprint(self.target_material))
+            except Exception:
+                current_fp = ""
+
+            if self.is_live_sync and current_fp != self._last_fingerprint:
+                self._last_fingerprint = current_fp
+                is_multi = False
+                try:
+                    is_multi = bool(rt.isKindOf(self.target_material, rt.Multimaterial) or rt.isKindOf(self.target_material, rt.multiSubMaterial))
+                except Exception:
+                    is_multi = False
+                if is_multi:
+                    cur_row = self.table.currentRow()
+                    self.load_material(self.target_material)
+                    if 0 <= cur_row < self.table.rowCount():
+                        self.table.selectRow(cur_row)
+                else:
+                    self.load_single_material(self.target_material)
+            else:
+                self.update_button_states()
+            return
+
+        # Unlocked, or locked with no material loaded yet (waiting for first selection)
         try:
             detected_mat = rt._jsh_MME_GetSelectedMaterial()
             if str(detected_mat) == "undefined" or detected_mat is None:
@@ -2073,14 +2220,11 @@ class MultiMaterialEditorUI(QDialog):
             detected_mat = None
 
         if detected_mat is None:
-            if self.target_material and rt and rt.isValidObj(self.target_material):
-                detected_mat = self.target_material
-            elif self._current_mat_handle != 0:
+            if self._current_mat_handle != 0 or self.target_material is not None:
                 self.clear_ui()
-                return
             else:
                 self.update_button_states()
-                return
+            return
 
         try:
             mat_handle = int(rt._jsh_MME_GetMatHandle(detected_mat))
@@ -2088,7 +2232,7 @@ class MultiMaterialEditorUI(QDialog):
             mat_handle = 0
 
         if mat_handle == 0:
-            if self._current_mat_handle != 0:
+            if self._current_mat_handle != 0 or self.target_material is not None:
                 self.clear_ui()
             return
 

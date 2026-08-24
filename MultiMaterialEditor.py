@@ -1957,7 +1957,6 @@ class MultiMaterialEditorUI(QDialog):
         self.header_frame = QFrame(self)
         self.header_frame.setObjectName("headerFrame")
         self.header_frame.setCursor(Qt.PointingHandCursor)
-        self.header_frame.setToolTip("Click to open and select this Multi-Material in Slate Material Editor")
         self.header_frame.mousePressEvent = lambda event: self.open_target_material_in_sme() if event.button() == Qt.LeftButton else None
 
         header_layout = QHBoxLayout(self.header_frame)
@@ -1987,7 +1986,7 @@ class MultiMaterialEditorUI(QDialog):
         self.btn_lock.setFixedSize(30, 30)
         self.btn_lock.setIcon(get_lock_icon(False))
         self.btn_lock.setIconSize(QSize(18, 18))
-        self.btn_lock.setToolTip("Lock Material: OFF\nClick to lock the current material and prevent viewport selection changes from replacing it.")
+        self.btn_lock.setToolTip("Lock current material")
         self.btn_lock.clicked.connect(self.toggle_lock)
         top_layout.addWidget(self.btn_lock, 0, Qt.AlignVCenter)
 
@@ -2025,17 +2024,14 @@ class MultiMaterialEditorUI(QDialog):
         tools_layout.setSpacing(6)
 
         self.btn_add = QPushButton("➕ Add", self)
-        self.btn_add.setToolTip("Add a new empty slot at the end of the material list")
         self.btn_add.clicked.connect(self.add_slot)
         tools_layout.addWidget(self.btn_add)
 
         self.btn_remove = QPushButton("➖ Delete", self)
-        self.btn_remove.setToolTip("Remove the currently selected slot from the material")
         self.btn_remove.clicked.connect(self.remove_selected_slot)
         tools_layout.addWidget(self.btn_remove)
 
         self.btn_duplicate = QPushButton("Duplicate", self)
-        self.btn_duplicate.setToolTip("Duplicate the selected slot with its properties")
         self.btn_duplicate.clicked.connect(self.duplicate_selected_slot)
         tools_layout.addWidget(self.btn_duplicate)
 
@@ -2057,19 +2053,17 @@ class MultiMaterialEditorUI(QDialog):
 
         self.chk_auto_renumber = QCheckBox("Auto-Renumber IDs", self)
         self.chk_auto_renumber.setChecked(config_settings.get('auto_renumber_ids', True))
-        self.chk_auto_renumber.setToolTip("Automatically renumbers Material IDs (1..N) according to slot order on drag & drop")
         self.chk_auto_renumber.toggled.connect(self.on_auto_renumber_toggled)
         options_layout.addWidget(self.chk_auto_renumber)
 
         self.chk_sync_names = QCheckBox("Sync Names", self)
         self.chk_sync_names.setChecked(config_settings.get('sync_names', True))
-        self.chk_sync_names.setToolTip("When editing slot names, automatically renames the assigned sub-material in 3ds Max")
+        self.chk_sync_names.setToolTip("Sync slot name with sub-material name")
         self.chk_sync_names.toggled.connect(self.save_checkbox_settings)
         options_layout.addWidget(self.chk_sync_names)
 
         self.chk_update_faces = WarningSuffixCheckBox("Update IDs on Geometry", self)
         self.chk_update_faces.setChecked(config_settings.get('update_ids_on_geometry', False))
-        self.chk_update_faces.setToolTip("Reassigns face Material IDs on scene geometry to match updated slot positions")
         self.chk_update_faces.toggled.connect(self.save_checkbox_settings)
         options_layout.addWidget(self.chk_update_faces)
 
@@ -2127,7 +2121,7 @@ class MultiMaterialEditorUI(QDialog):
                     border-radius: 4px;
                 }
             """)
-            self.btn_toggle_sync.setToolTip("Live Sync is active: Changes in the table are immediately synchronized with 3ds Max.\nClick to pause and switch to manual Apply mode.")
+            self.btn_toggle_sync.setToolTip("")
             if hasattr(self, 'btn_apply') and self.btn_apply is not None:
                 self.btn_apply.setVisible(False)
             self.set_status(self._current_status_text)
@@ -2149,7 +2143,7 @@ class MultiMaterialEditorUI(QDialog):
                     border-color: #7d7d7d;
                 }
             """)
-            self.btn_toggle_sync.setToolTip("Live Sync is paused: Changes are kept locally.\nClick 'Apply Changes' to save or click here to resume Live Sync.")
+            self.btn_toggle_sync.setToolTip("")
             if hasattr(self, 'btn_apply') and self.btn_apply is not None:
                 self.btn_apply.setVisible(True)
             self.btn_toggle_sync.setText("● Live Sync Paused")
@@ -2168,10 +2162,7 @@ class MultiMaterialEditorUI(QDialog):
         if hasattr(self, 'btn_lock') and self.btn_lock is not None:
             self.btn_lock.setChecked(self.is_locked)
             self.btn_lock.setIcon(get_lock_icon(self.is_locked))
-            if self.is_locked:
-                self.btn_lock.setToolTip("Lock Material: ON\nCurrent material is locked. Viewport selection changes will not replace it.\nClick to unlock.")
-            else:
-                self.btn_lock.setToolTip("Lock Material: OFF\nClick to lock the current material and prevent viewport selection changes from replacing it.")
+            self.btn_lock.setToolTip("Lock current material")
 
         if not self.is_locked and rt:
             self.check_selection_and_material_changes()
@@ -2302,8 +2293,6 @@ class MultiMaterialEditorUI(QDialog):
         self.table.setRowCount(0)
         self.lbl_mat_name.setText("")
         self.lbl_slot_count.setText("Slots: - | Used in scene: -")
-        if hasattr(self, 'header_frame'):
-            self.header_frame.setToolTip("")
         self.set_status("● Waiting for selection...")
         self.update_button_states()
         self.is_loading = False
@@ -2337,8 +2326,6 @@ class MultiMaterialEditorUI(QDialog):
 
             self.lbl_mat_name.setText(mat_name)
             self.lbl_slot_count.setText("Type: {} | Used in scene: {} object(s)".format(mat_class, len(scene_objs)))
-            if hasattr(self, 'header_frame'):
-                self.header_frame.setToolTip("Click to open and select '{}' ({}) in Slate Material Editor".format(mat_name, mat_class))
 
             self.slots_data = []
             self.initial_id_map = {}
@@ -2389,8 +2376,6 @@ class MultiMaterialEditorUI(QDialog):
 
             self.lbl_mat_name.setText(mat_name)
             self.lbl_slot_count.setText("Slots: {} | Used in scene: {} object(s)".format(num_subs, len(scene_objs)))
-            if hasattr(self, 'header_frame'):
-                self.header_frame.setToolTip("Click to open and select '{}' in Slate Material Editor".format(mat_name))
 
             self.slots_data = []
             self.initial_id_map = {}
@@ -2452,8 +2437,6 @@ class MultiMaterialEditorUI(QDialog):
         ]
         self.lbl_mat_name.setText("Mock_MultiMaterial_Demo")
         self.lbl_slot_count.setText("Slots: 5 (Test Mode)")
-        if hasattr(self, 'header_frame'):
-            self.header_frame.setToolTip("Click to open and select 'Mock_MultiMaterial_Demo' in Slate Material Editor")
         self.populate_table()
         self.is_loading = False
 
@@ -2639,17 +2622,14 @@ class MultiMaterialEditorUI(QDialog):
             id_item = QTableWidgetItem(str(slot['id']))
             id_item.setTextAlignment(Qt.AlignCenter)
             id_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
-            id_item.setToolTip("Double-click to edit Material ID")
             self.table.setItem(row, 0, id_item)
 
             swatch_item = QTableWidgetItem()
             swatch_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            swatch_item.setToolTip("Click to change diffuse color")
             self.table.setItem(row, 1, swatch_item)
 
             name_item = QTableWidgetItem(slot['name'])
             name_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
-            name_item.setToolTip("Double-click to edit slot name")
             self.table.setItem(row, 2, name_item)
 
             sub_text = slot['sub_mat_name']
@@ -2657,15 +2637,10 @@ class MultiMaterialEditorUI(QDialog):
                 sub_text += "  ({})".format(slot['sub_mat_class'])
             sub_item = QTableWidgetItem(sub_text)
             sub_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            if slot.get('sub_mat'):
-                sub_item.setToolTip("Click to open and select '{}' in Slate Material Editor".format(slot.get('sub_mat_name', 'Sub-Material')))
-            else:
-                sub_item.setToolTip("No sub-material assigned to this slot")
             self.table.setItem(row, 3, sub_item)
 
             chk_item = QTableWidgetItem()
             chk_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            chk_item.setToolTip("Click to enable/disable slot")
             self.table.setItem(row, 4, chk_item)
 
             used_faces = slot.get('face_count', 0)
@@ -3102,15 +3077,14 @@ class MultiMaterialEditorUI(QDialog):
                         objs_using_mat_count = 0
 
             if objs_using_mat_count > 1:
-                self.chk_update_faces.set_warning_suffix("(slow with {} objects)".format(objs_using_mat_count))
+                self.chk_update_faces.set_warning_suffix("(slow with multiple objects)")
                 self.chk_update_faces.setToolTip(
-                    "Warning: This Multi-Material is applied to {} objects in the scene.\n"
-                    "Reassigning face Material IDs across multiple objects on every drag/reorder may cause viewport lag."
-                    .format(objs_using_mat_count)
+                    "Warning: This Multi-Material is applied to multiple objects in the scene.\n"
+                    "Updating geometry face IDs across multiple objects can be slow."
                 )
             else:
                 self.chk_update_faces.set_warning_suffix("")
-                self.chk_update_faces.setToolTip("Reassigns face Material IDs on scene geometry to match updated slot positions")
+                self.chk_update_faces.setToolTip("")
 
     def find_duplicate_material_groups(self):
         """Scans self.slots_data and returns a list of duplicate groups."""

@@ -2666,8 +2666,32 @@ class MultiMaterialEditorUI(QDialog):
 
             self.table.setRowHeight(row, 31)
 
+        self.update_slot_count_label()
         self.update_button_states()
         self.is_loading = False
+
+    def update_slot_count_label(self):
+        if not hasattr(self, 'lbl_slot_count') or self.lbl_slot_count is None:
+            return
+
+        if not self.target_material:
+            self.lbl_slot_count.setText("Slots: - | Used in scene: -")
+            return
+
+        is_multi = bool(len(self.slots_data) > 0)
+        obj_count = len(getattr(self, '_current_scene_objs_using_mat', []))
+
+        if is_multi:
+            slot_count = len(self.slots_data)
+            self.lbl_slot_count.setText("Slots: {} | Used in scene: {} object(s)".format(slot_count, obj_count))
+        else:
+            mat_class = "Material"
+            if rt:
+                try:
+                    mat_class = str(rt.classOf(self.target_material))
+                except Exception:
+                    pass
+            self.lbl_slot_count.setText("Type: {} | Used in scene: {} object(s)".format(mat_class, obj_count))
 
     def on_table_cell_clicked(self, row, column):
         if self.table._is_dragging:

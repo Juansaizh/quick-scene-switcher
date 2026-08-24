@@ -1880,12 +1880,12 @@ class MultiMaterialEditorUI(QDialog):
         tools_layout = QHBoxLayout()
         tools_layout.setSpacing(6)
 
-        self.btn_add = QPushButton("➕ Add Slot", self)
+        self.btn_add = QPushButton("➕ Add", self)
         self.btn_add.setToolTip("Add a new empty slot at the end of the material list")
         self.btn_add.clicked.connect(self.add_slot)
         tools_layout.addWidget(self.btn_add)
 
-        self.btn_remove = QPushButton("➖ Remove Selected", self)
+        self.btn_remove = QPushButton("➖ Delete", self)
         self.btn_remove.setToolTip("Remove the currently selected slot from the material")
         self.btn_remove.clicked.connect(self.remove_selected_slot)
         tools_layout.addWidget(self.btn_remove)
@@ -2585,15 +2585,16 @@ class MultiMaterialEditorUI(QDialog):
         else:
             self.set_status("● Paused: Slots reordered")
 
-    def force_renumber_ids(self, refresh_table=True):
+    def force_renumber_ids(self, refresh_table=True, sync=True):
         for idx, slot in enumerate(self.slots_data):
             slot['id'] = idx + 1
         if refresh_table:
             self.populate_table()
-        if self.is_live_sync:
-            self.sync_to_max("Renumber IDs", update_geom=True)
-        else:
-            self.set_status("● Paused: IDs renumbered")
+        if sync:
+            if self.is_live_sync:
+                self.sync_to_max("Renumber IDs", update_geom=self.chk_update_faces.isChecked())
+            else:
+                self.set_status("● Paused: IDs renumbered")
 
     def on_table_cell_changed(self, row, column):
         if self.is_loading or row >= len(self.slots_data):
@@ -2663,7 +2664,7 @@ class MultiMaterialEditorUI(QDialog):
             return
         next_id = len(self.slots_data) + 1
         new_slot = {
-            'initial_id': next_id,
+            'initial_id': None,
             'id': next_id,
             'name': '',
             'sub_mat': None,
@@ -2695,14 +2696,14 @@ class MultiMaterialEditorUI(QDialog):
         del self.slots_data[selected_row]
 
         if self.chk_auto_renumber.isChecked():
-            self.force_renumber_ids(refresh_table=False)
+            self.force_renumber_ids(refresh_table=False, sync=False)
 
         self.populate_table()
         new_select = min(selected_row, len(self.slots_data) - 1)
         if new_select >= 0:
             self.table.selectRow(new_select)
         if self.is_live_sync:
-            self.sync_to_max("Remove Slot", update_geom=True)
+            self.sync_to_max("Remove Slot", update_geom=self.chk_update_faces.isChecked())
         else:
             self.set_status("● Paused: Slot removed")
 
@@ -2752,20 +2753,25 @@ class MultiMaterialEditorUI(QDialog):
         else:
             dup_slot['name'] = ""
 
-        dup_slot['id'] = len(self.slots_data) + 1
+        # The duplicated slot is a new slot with 0 faces in geometry; it must NOT claim the original slot's initial ID
+        dup_slot['initial_id'] = None
         dup_slot['face_count'] = 0
         if src_slot.get('color'):
             dup_slot['color'] = QColor(src_slot['color'])
 
+        if not self.chk_auto_renumber.isChecked():
+            max_id = max([s.get('id', 0) for s in self.slots_data], default=0)
+            dup_slot['id'] = max_id + 1
+
         self.slots_data.insert(selected_row + 1, dup_slot)
 
         if self.chk_auto_renumber.isChecked():
-            self.force_renumber_ids(refresh_table=False)
+            self.force_renumber_ids(refresh_table=False, sync=False)
 
         self.populate_table()
         self.table.selectRow(selected_row + 1)
         if self.is_live_sync:
-            self.sync_to_max("Duplicate Slot", update_geom=False)
+            self.sync_to_max("Duplicate Slot", update_geom=self.chk_update_faces.isChecked())
         else:
             self.set_status("● Paused: Slot duplicated")
 

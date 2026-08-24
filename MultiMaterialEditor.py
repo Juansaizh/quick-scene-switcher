@@ -1550,6 +1550,53 @@ class ReorderableTableWidget(QTableWidget):
         super(ReorderableTableWidget, self).paintEvent(event)
 
 
+class WarningSuffixCheckBox(QCheckBox):
+    """Checkbox supporting an auxiliary warning text suffix drawn in warning orange."""
+    def __init__(self, text="", parent=None):
+        super(WarningSuffixCheckBox, self).__init__(text, parent)
+        self._warning_suffix = ""
+
+    def set_warning_suffix(self, suffix):
+        if self._warning_suffix != suffix:
+            self._warning_suffix = suffix
+            self.updateGeometry()
+            self.update()
+
+    def sizeHint(self):
+        hint = super(WarningSuffixCheckBox, self).sizeHint()
+        if self._warning_suffix:
+            fm = self.fontMetrics()
+            try:
+                extra_w = fm.horizontalAdvance(" " + self._warning_suffix)
+            except AttributeError:
+                extra_w = fm.width(" " + self._warning_suffix)
+            hint.setWidth(hint.width() + extra_w + 4)
+        return hint
+
+    def paintEvent(self, event):
+        super(WarningSuffixCheckBox, self).paintEvent(event)
+        if self._warning_suffix:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setFont(self.font())
+            painter.setPen(QColor("#ff9d2e"))  # Vibrant warm warning orange
+
+            fm = self.fontMetrics()
+            try:
+                base_w = fm.horizontalAdvance(self.text())
+            except AttributeError:
+                base_w = fm.width(self.text())
+
+            opt = QtWidgets.QStyleOptionButton()
+            self.initStyleOption(opt)
+            indicator_rect = self.style().subElementRect(QtWidgets.QStyle.SE_CheckBoxIndicator, opt, self)
+            spacing = 8
+            x = indicator_rect.right() + spacing + base_w + 5
+            draw_rect = QRect(x, 0, max(0, self.width() - x), self.height())
+            painter.drawText(draw_rect, Qt.AlignVCenter | Qt.AlignLeft, self._warning_suffix)
+            painter.end()
+
+
 class MultiMaterialEditorUI(QDialog):
     def __init__(self, target_material=None, parent=None):
         max_parent = parent if parent is not None else get_max_main_window()
@@ -1566,6 +1613,8 @@ class MultiMaterialEditorUI(QDialog):
         self._duplicate_ids = set()
         self._preview_duplicate_groups = None
         self._backup_slots_data = None
+        self._current_scene_objs_using_mat = []
+        self._last_sel_handles = []
         self.is_loading = False
 
         self.setWindowTitle("JSH | Multi-Material Editor")
@@ -1874,7 +1923,7 @@ class MultiMaterialEditorUI(QDialog):
         self.chk_sync_names.toggled.connect(self.save_checkbox_settings)
         options_layout.addWidget(self.chk_sync_names)
 
-        self.chk_update_faces = QCheckBox("Update IDs on Geometry", self)
+        self.chk_update_faces = WarningSuffixCheckBox("Update IDs on Geometry", self)
         self.chk_update_faces.setChecked(config_settings.get('update_ids_on_geometry', False))
         self.chk_update_faces.setToolTip("Reassigns face Material IDs on scene geometry to match updated slot positions")
         self.chk_update_faces.toggled.connect(self.save_checkbox_settings)
@@ -1974,7 +2023,15 @@ class MultiMaterialEditorUI(QDialog):
         if self.table._is_dragging or self.table.state() == QAbstractItemView.EditingState:
             return
 
-        self.update_button_states()
+        current_sel_handles = []
+        try:
+            if rt.selection and rt.selection.count > 0:
+                current_sel_handles = [int(rt.getHandleByAnim(obj)) for obj in rt.selection if rt.isValidNode(obj)]
+        except Exception:
+            current_sel_handles = []
+
+        selection_changed = (current_sel_handles != self._last_sel_handles)
+        self._last_sel_handles = current_sel_handles
 
         try:
             detected_mat = rt._jsh_MME_GetSelectedMultiMaterial()
@@ -1990,6 +2047,7 @@ class MultiMaterialEditorUI(QDialog):
                 self.clear_ui()
                 return
             else:
+                self.update_button_states()
                 return
 
         try:
@@ -2010,12 +2068,21 @@ class MultiMaterialEditorUI(QDialog):
         if mat_handle != self._current_mat_handle:
             self._current_mat_handle = mat_handle
             self.load_material(detected_mat)
+        elif selection_changed and len(current_sel_handles) > 0:
+            # Reselected object(s) or selection changed in viewport: refresh material and scene object counts
+            self._last_fingerprint = current_fp
+            cur_row = self.table.currentRow()
+            self.load_material(detected_mat)
+            if 0 <= cur_row < self.table.rowCount():
+                self.table.selectRow(cur_row)
         elif self.is_live_sync and current_fp != self._last_fingerprint:
             self._last_fingerprint = current_fp
             cur_row = self.table.currentRow()
             self.load_material(detected_mat)
             if 0 <= cur_row < self.table.rowCount():
                 self.table.selectRow(cur_row)
+        else:
+            self.update_button_states()
 
     def clear_ui(self):
         self.target_material = None
@@ -2025,6 +2092,7 @@ class MultiMaterialEditorUI(QDialog):
         self.initial_id_map = {}
         self._preview_duplicate_groups = None
         self._backup_slots_data = None
+        self._current_scene_objs_using_mat = []
         self.is_loading = True
         self.table.setRowCount(0)
         self.lbl_mat_name.setText("(No Multi/Sub-Object Selected)")
@@ -2068,6 +2136,7 @@ class MultiMaterialEditorUI(QDialog):
 
             num_subs = len(raw_slots)
             scene_objs = self.get_objects_using_material(mat)
+            self._current_scene_objs_using_mat = scene_objs
             id_face_counts = self.count_faces_per_id(scene_objs)
 
             self.lbl_mat_name.setText(mat_name)
@@ -2115,6 +2184,7 @@ class MultiMaterialEditorUI(QDialog):
 
             self.populate_table()
             self.set_status("● Live Sync Active")
+            self.update_button_states()
 
         except Exception as e:
             traceback.print_exc()
@@ -2124,6 +2194,7 @@ class MultiMaterialEditorUI(QDialog):
     def load_mock_data(self):
         """Loads sample mock data for standalone testing outside 3ds Max."""
         self.is_loading = True
+        self._current_scene_objs_using_mat = []
         self.slots_data = [
             {'initial_id': 1, 'id': 1, 'name': 'M_Wall_Paint_01', 'sub_mat': None, 'sub_mat_name': 'M_Wall_Paint_01', 'sub_mat_class': 'VRayMtl', 'enabled': True, 'color': QColor(220, 215, 205), 'face_count': 342},
             {'initial_id': 2, 'id': 2, 'name': 'M_Floor_Wood_Oak', 'sub_mat': None, 'sub_mat_name': 'M_Floor_Wood_Oak', 'sub_mat_class': 'CoronaPhysicalMtl', 'enabled': True, 'color': QColor(160, 110, 60), 'face_count': 128},
@@ -2729,6 +2800,32 @@ class MultiMaterialEditorUI(QDialog):
                     self.btn_fix_duplicates.setToolTip("Select at least one geometry object in viewport using this material to enable Fix Duplicates")
             else:
                 self.btn_fix_duplicates.setToolTip("Find duplicate sub-materials (e.g. from Attach), merge them into single slots, and remap geometry face IDs")
+
+        # Dynamic warning on Update IDs on Geometry checkbox if material is shared across multiple scene objects
+        if hasattr(self, 'chk_update_faces'):
+            objs_using_mat_count = 0
+            if has_mat:
+                objs_list = getattr(self, '_current_scene_objs_using_mat', None)
+                if objs_list is not None:
+                    objs_using_mat_count = len(objs_list)
+                elif rt:
+                    try:
+                        objs_list = self.get_objects_using_material(self.target_material)
+                        self._current_scene_objs_using_mat = objs_list
+                        objs_using_mat_count = len(objs_list)
+                    except Exception:
+                        objs_using_mat_count = 0
+
+            if objs_using_mat_count > 1:
+                self.chk_update_faces.set_warning_suffix("(slow with {} objects)".format(objs_using_mat_count))
+                self.chk_update_faces.setToolTip(
+                    "Warning: This Multi-Material is applied to {} objects in the scene.\n"
+                    "Reassigning face Material IDs across multiple objects on every drag/reorder may cause viewport lag."
+                    .format(objs_using_mat_count)
+                )
+            else:
+                self.chk_update_faces.set_warning_suffix("")
+                self.chk_update_faces.setToolTip("Reassigns face Material IDs on scene geometry to match updated slot positions")
 
     def find_duplicate_material_groups(self):
         """Scans self.slots_data and returns a list of duplicate groups."""

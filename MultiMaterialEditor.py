@@ -719,70 +719,72 @@ def init_maxscript_helpers():
         -- Lock Windows repainting ONLY while manipulating Edit_Poly modifier UI
         try ( windows.sendMessage maxHwnd 0x000B 0 0 ) catch()
         
-        try (
-            if (getCommandPanelTaskMode() != #modify) do setCommandPanelTaskMode #modify
-            if selection.count != 1 or selection[1] != obj do select obj
-            if modPanel.getCurrentObject() != epMod do modPanel.setCurrentObject epMod
-            subObjectLevel = 4
-            
-            -- Ensure any existing sub-object selections are cleared
-            try ( epMod.SetSelection #Face #{} ) catch()
-            try ( epMod.SetSelection #Vertex #{} ) catch()
-            try ( epMod.SetSelection #Edge #{} ) catch()
-            
-            -- Step 1: Pre-collect static face bitarrays for all changing oldIDs BEFORE any modifications
-            local pending = #()
-            for i = 1 to oldIDs.count do (
-                local oID = oldIDs[i]
-                local nID = newIDs[i]
-                if oID != nID do (
-                    local ba = #{}
-                    try (
-                        ba = polyop.getFacesByMatID obj oID
-                    ) catch()
-                    if ba.isEmpty do (
+        with undo off (
+            try (
+                if (getCommandPanelTaskMode() != #modify) do setCommandPanelTaskMode #modify
+                if selection.count != 1 or selection[1] != obj do select obj
+                if modPanel.getCurrentObject() != epMod do modPanel.setCurrentObject epMod
+                subObjectLevel = 4
+                
+                -- Ensure any existing sub-object selections are cleared
+                try ( epMod.SetSelection #Face #{} ) catch()
+                try ( epMod.SetSelection #Vertex #{} ) catch()
+                try ( epMod.SetSelection #Edge #{} ) catch()
+                
+                -- Step 1: Pre-collect static face bitarrays for all changing oldIDs BEFORE any modifications
+                local pending = #()
+                for i = 1 to oldIDs.count do (
+                    local oID = oldIDs[i]
+                    local nID = newIDs[i]
+                    if oID != nID do (
+                        local ba = #{}
                         try (
-                            epMod.selectByMaterialID = (oID - 1)
-                            epMod.ButtonOp #SelectByMaterial
-                            ba = epMod.GetSelection #Face
+                            ba = polyop.getFacesByMatID obj oID
                         ) catch()
-                    )
-                    if not ba.isEmpty do (
-                        append pending #(nID, ba)
+                        if ba.isEmpty do (
+                            try (
+                                epMod.selectByMaterialID = (oID - 1)
+                                epMod.ButtonOp #SelectByMaterial
+                                ba = epMod.GetSelection #Face
+                            ) catch()
+                        )
+                        if not ba.isEmpty do (
+                            append pending #(nID, ba)
+                        )
                     )
                 )
-            )
-            
-            -- Step 2: Apply the target newIDs directly to the pre-collected bitarrays using SetOperation & Commit
-            for change in pending do (
-                local nID = change[1]
-                local ba = change[2]
+                
+                -- Step 2: Apply the target newIDs directly to the pre-collected bitarrays using SetOperation & Commit
+                for change in pending do (
+                    local nID = change[1]
+                    local ba = change[2]
+                    
+                    epMod.SetSelection #Face #{}
+                    epMod.Select #Face ba
+                    epMod.materialIDToSet = (nID - 1)
+                    epMod.SetOperation #SetMaterial
+                    epMod.Commit()
+                    count += ba.numberSet
+                )
                 
                 epMod.SetSelection #Face #{}
-                epMod.Select #Face ba
-                epMod.materialIDToSet = (nID - 1)
-                epMod.SetOperation #SetMaterial
-                epMod.Commit()
-                count += ba.numberSet
+                subObjectLevel = 0
+                
+            ) catch (
+                format "Error updating Edit_Poly Face IDs: %\n" (getCurrentException())
             )
             
-            epMod.SetSelection #Face #{}
-            subObjectLevel = 0
+            -- Restore original command panel mode and selection
+            try (
+                if origMode != undefined and (getCommandPanelTaskMode() != origMode) do (
+                    setCommandPanelTaskMode origMode
+                )
+            ) catch()
             
-        ) catch (
-            format "Error updating Edit_Poly Face IDs: %\n" (getCurrentException())
+            try (
+                if prevSel.count > 0 then select prevSel else clearSelection()
+            ) catch()
         )
-        
-        -- Restore original command panel mode and selection
-        try (
-            if origMode != undefined and (getCommandPanelTaskMode() != origMode) do (
-                setCommandPanelTaskMode origMode
-            )
-        ) catch()
-        
-        try (
-            if prevSel.count > 0 then select prevSel else clearSelection()
-        ) catch()
         
         -- Unlock Windows repainting
         try ( windows.sendMessage maxHwnd 0x000B 1 0 ) catch()
@@ -796,13 +798,13 @@ def init_maxscript_helpers():
         local count = 0
         
         -- Clear any active sub-object polygon/element/vertex selections
-        _jsh_MME_ClearSubObjectSelection obj
+        with undo off ( _jsh_MME_ClearSubObjectSelection obj )
         
         local hasModifiers = (isProperty obj #modifiers and obj.modifiers.count > 0)
         
         if hasModifiers then (
             local topMod = obj.modifiers[1]
-            local ep = if isKindOf topMod Edit_Poly then topMod else undefined
+            local ep = if (isKindOf topMod Edit_Poly and topMod.name == "Edit Poly (Modified IDs)") then topMod else undefined
             if ep == undefined do (
                 ep = Edit_Poly name:"Edit Poly (Modified IDs)"
                 addModifier obj ep

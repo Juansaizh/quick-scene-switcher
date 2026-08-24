@@ -1707,6 +1707,7 @@ class MultiMaterialEditorUI(QDialog):
         self.setMinimumSize(620, 420)
         self.setWindowFlags((self.windowFlags() | Qt.Window) & ~Qt.WindowContextHelpButtonHint)
 
+        self.is_loading = True
         self.setup_style()
         self.init_ui()
 
@@ -1714,6 +1715,7 @@ class MultiMaterialEditorUI(QDialog):
             self.load_material(self.target_material)
         else:
             self.check_selection_and_material_changes()
+        self.is_loading = False
 
         self._sync_timer = QTimer(self)
         self._sync_timer.setInterval(200)
@@ -1727,6 +1729,13 @@ class MultiMaterialEditorUI(QDialog):
                 'sync_names': self.chk_sync_names.isChecked(),
                 'update_ids_on_geometry': self.chk_update_faces.isChecked()
             })
+
+    def on_auto_renumber_toggled(self, checked):
+        self.save_checkbox_settings()
+        if checked and not self.is_loading and self.slots_data and self.target_material:
+            needs_renumber = any(slot.get('id') != idx + 1 for idx, slot in enumerate(self.slots_data))
+            if needs_renumber:
+                self.force_renumber_ids(refresh_table=True, sync=True)
 
     def closeEvent(self, event):
         self.save_checkbox_settings()
@@ -2049,7 +2058,7 @@ class MultiMaterialEditorUI(QDialog):
         self.chk_auto_renumber = QCheckBox("Auto-Renumber IDs", self)
         self.chk_auto_renumber.setChecked(config_settings.get('auto_renumber_ids', True))
         self.chk_auto_renumber.setToolTip("Automatically renumbers Material IDs (1..N) according to slot order on drag & drop")
-        self.chk_auto_renumber.toggled.connect(self.save_checkbox_settings)
+        self.chk_auto_renumber.toggled.connect(self.on_auto_renumber_toggled)
         options_layout.addWidget(self.chk_auto_renumber)
 
         self.chk_sync_names = QCheckBox("Sync Names", self)

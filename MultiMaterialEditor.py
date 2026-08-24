@@ -1894,24 +1894,27 @@ class MultiMaterialEditorUI(QDialog):
         bottom_layout = QHBoxLayout()
         bottom_layout.setSpacing(10)
 
-        self.btn_toggle_sync = QPushButton("● Live Sync Active", self)
-        self.btn_toggle_sync.setToolTip("Live Sync is active: Changes in the table are immediately synchronized with 3ds Max.\nClick to pause and enable manual Apply mode.")
-        self.btn_toggle_sync.clicked.connect(self.toggle_live_sync)
-        bottom_layout.addWidget(self.btn_toggle_sync, 1)
+        # Live Sync status / manual apply widgets (commented out for clean native UI experience; uncomment for debugging)
+        # self.btn_toggle_sync = QPushButton("● Live Sync Active", self)
+        # self.btn_toggle_sync.setToolTip("Live Sync is active: Changes in the table are immediately synchronized with 3ds Max.\nClick to pause and enable manual Apply mode.")
+        # self.btn_toggle_sync.clicked.connect(self.toggle_live_sync)
+        # bottom_layout.addWidget(self.btn_toggle_sync, 1)
 
-        self.btn_apply = QPushButton("Apply Changes", self)
-        self.btn_apply.setObjectName("btnApply")
-        self.btn_apply.setToolTip("Apply pending local changes to 3ds Max Multi-Material and scene geometry")
-        self.btn_apply.clicked.connect(self.apply_changes)
-        self.btn_apply.setVisible(False)
-        bottom_layout.addWidget(self.btn_apply)
+        # self.btn_apply = QPushButton("Apply Changes", self)
+        # self.btn_apply.setObjectName("btnApply")
+        # self.btn_apply.setToolTip("Apply pending local changes to 3ds Max Multi-Material and scene geometry")
+        # self.btn_apply.clicked.connect(self.apply_changes)
+        # self.btn_apply.setVisible(False)
+        # bottom_layout.addWidget(self.btn_apply)
+
+        bottom_layout.addStretch(1)
 
         self.btn_close = QPushButton("Close", self)
         self.btn_close.clicked.connect(self.close)
         bottom_layout.addWidget(self.btn_close)
 
         main_layout.addLayout(bottom_layout)
-        self.update_sync_ui_state()
+        # self.update_sync_ui_state()
 
     def toggle_live_sync(self):
         self.is_live_sync = not self.is_live_sync
@@ -1924,6 +1927,8 @@ class MultiMaterialEditorUI(QDialog):
             self.set_status("● Live Sync Paused")
 
     def update_sync_ui_state(self):
+        if not hasattr(self, 'btn_toggle_sync') or self.btn_toggle_sync is None:
+            return
         if self.is_live_sync:
             self.btn_toggle_sync.setStyleSheet("""
                 QPushButton {
@@ -1942,7 +1947,8 @@ class MultiMaterialEditorUI(QDialog):
                 }
             """)
             self.btn_toggle_sync.setToolTip("Live Sync is active: Changes in the table are immediately synchronized with 3ds Max.\nClick to pause and switch to manual Apply mode.")
-            self.btn_apply.setVisible(False)
+            if hasattr(self, 'btn_apply') and self.btn_apply is not None:
+                self.btn_apply.setVisible(False)
             self.set_status(self._current_status_text)
         else:
             self.btn_toggle_sync.setStyleSheet("""
@@ -1963,12 +1969,13 @@ class MultiMaterialEditorUI(QDialog):
                 }
             """)
             self.btn_toggle_sync.setToolTip("Live Sync is paused: Changes are kept locally.\nClick 'Apply Changes' to save or click here to resume Live Sync.")
-            self.btn_apply.setVisible(True)
+            if hasattr(self, 'btn_apply') and self.btn_apply is not None:
+                self.btn_apply.setVisible(True)
             self.btn_toggle_sync.setText("● Live Sync Paused")
 
     def set_status(self, text):
         self._current_status_text = text
-        if self.is_live_sync:
+        if hasattr(self, 'btn_toggle_sync') and self.btn_toggle_sync is not None and self.is_live_sync:
             self.btn_toggle_sync.setText(text)
 
     def check_selection_and_material_changes(self):

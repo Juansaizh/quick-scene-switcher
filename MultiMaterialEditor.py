@@ -186,6 +186,7 @@ def init_maxscript_helpers():
     if not rt:
         return
     mxs_code = """
+    global _jsh_MME_GetSelectedMaterial
     global _jsh_MME_GetSelectedMultiMaterial
     global _jsh_MME_GetMultiMatData
     global _jsh_MME_ApplyMultiMatData
@@ -295,11 +296,11 @@ def init_maxscript_helpers():
         false
     )
 
-    fn _jsh_MME_GetSelectedMultiMaterial = (
+    fn _jsh_MME_GetSelectedMaterial = (
         try (
             if selection != undefined and selection.count > 0 do (
                 for obj in selection do (
-                    if isValidNode obj and obj.material != undefined and (isKindOf obj.material Multimaterial or isKindOf obj.material multiSubMaterial) do (
+                    if isValidNode obj and obj.material != undefined and isValidObj obj.material do (
                         return obj.material
                     )
                 )
@@ -312,14 +313,22 @@ def init_maxscript_helpers():
                 if activeViewIdx > 0 do (
                     local view = sme.getView activeViewIdx
                     local nodes = view.getSelectedNodes()
-                    for n in nodes do (
-                        local ref = n.reference
-                        if ref != undefined and isValidObj ref do (
-                            if (isKindOf ref Multimaterial or isKindOf ref multiSubMaterial) do return ref
-                            local deps = (refs.dependents ref)
-                            for d in deps do (
-                                if isValidObj d and (isKindOf d Multimaterial or isKindOf d multiSubMaterial) do return d
+                    if nodes != undefined and nodes.count > 0 do (
+                        -- Priority 1: MultiMaterial selected or dependent in SME
+                        for n in nodes do (
+                            local ref = n.reference
+                            if ref != undefined and isValidObj ref do (
+                                if (isKindOf ref Multimaterial or isKindOf ref multiSubMaterial) do return ref
+                                local deps = (refs.dependents ref)
+                                for d in deps do (
+                                    if isValidObj d and (isKindOf d Multimaterial or isKindOf d multiSubMaterial) do return d
+                                )
                             )
+                        )
+                        -- Priority 2: Any single material selected in SME
+                        for n in nodes do (
+                            local ref = n.reference
+                            if ref != undefined and isValidObj ref and isKindOf ref material do return ref
                         )
                     )
                 )
@@ -327,15 +336,18 @@ def init_maxscript_helpers():
         ) catch()
 
         try (
-            local activeSlot = medit.GetActiveMtlSlot()
-            local meditMat = meditMaterials[activeSlot]
-            if meditMat != undefined and isValidObj meditMat and (isKindOf meditMat Multimaterial or isKindOf meditMat multiSubMaterial) do (
-                return meditMat
+            if MatEditor != undefined and MatEditor.isOpen() and MatEditor.mode == #basic do (
+                local activeSlot = medit.GetActiveMtlSlot()
+                local meditMat = meditMaterials[activeSlot]
+                if meditMat != undefined and isValidObj meditMat and (isKindOf meditMat Multimaterial or isKindOf meditMat multiSubMaterial) do (
+                    return meditMat
+                )
             )
         ) catch()
         
         undefined
     )
+    _jsh_MME_GetSelectedMultiMaterial = _jsh_MME_GetSelectedMaterial
 
     fn _jsh_MME_GetMatHandle mat = (
         if mat == undefined or not isValidObj mat do return 0
@@ -348,7 +360,10 @@ def init_maxscript_helpers():
 
     fn _jsh_MME_GetMatFingerprint mat = (
         try (
-            if mat == undefined or not isValidObj mat or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return ""
+            if mat == undefined or not isValidObj mat do return ""
+            if not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do (
+                return (classOf mat as string) + ":" + (mat.name as string) + ":" + ((getHandleByAnim mat) as string)
+            )
             
             -- Read-only check: determine effective slot count ignoring trailing undefined slots with duplicate IDs
             local count = mat.numsubs
@@ -1549,6 +1564,23 @@ class ReorderableTableWidget(QTableWidget):
 
         super(ReorderableTableWidget, self).paintEvent(event)
 
+        if self.rowCount() == 0:
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setRenderHint(QPainter.TextAntialiasing)
+
+            painter.setFont(QFont("Segoe UI", 11, QFont.Bold))
+            painter.setPen(QColor("#b5b5b5"))
+            rect_title = QRect(0, self.viewport().height() // 2 - 24, self.viewport().width(), 24)
+            painter.drawText(rect_title, Qt.AlignCenter, "No Multi/Sub-Object Material Selected")
+
+            painter.setFont(QFont("Segoe UI", 9))
+            painter.setPen(QColor("#787878"))
+            rect_sub = QRect(0, self.viewport().height() // 2 + 4, self.viewport().width(), 20)
+            painter.drawText(rect_sub, Qt.AlignCenter, "Select an object in viewport or a material node in SME")
+
+            painter.end()
+
 
 class WarningSuffixCheckBox(QCheckBox):
     """Checkbox supporting an auxiliary warning text suffix drawn in warning orange."""
@@ -1835,11 +1867,11 @@ class MultiMaterialEditorUI(QDialog):
 
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
-        self.lbl_mat_name = QLabel("(No Multi/Sub-Object Selected)", self)
+        self.lbl_mat_name = QLabel("", self)
         self.lbl_mat_name.setObjectName("matTitle")
         self.lbl_mat_name.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
-        self.lbl_slot_count = QLabel("Select a Multi-Material node in SME or an object in viewport", self)
+        self.lbl_slot_count = QLabel("Slots: - | Used in scene: -", self)
         self.lbl_slot_count.setObjectName("slotCountLabel")
         self.lbl_slot_count.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
@@ -2034,7 +2066,7 @@ class MultiMaterialEditorUI(QDialog):
         self._last_sel_handles = current_sel_handles
 
         try:
-            detected_mat = rt._jsh_MME_GetSelectedMultiMaterial()
+            detected_mat = rt._jsh_MME_GetSelectedMaterial()
             if str(detected_mat) == "undefined" or detected_mat is None:
                 detected_mat = None
         except Exception:
@@ -2065,24 +2097,42 @@ class MultiMaterialEditorUI(QDialog):
         except Exception:
             current_fp = ""
 
-        if mat_handle != self._current_mat_handle:
-            self._current_mat_handle = mat_handle
-            self.load_material(detected_mat)
-        elif selection_changed and len(current_sel_handles) > 0:
-            # Reselected object(s) or selection changed in viewport: refresh material and scene object counts
-            self._last_fingerprint = current_fp
-            cur_row = self.table.currentRow()
-            self.load_material(detected_mat)
-            if 0 <= cur_row < self.table.rowCount():
-                self.table.selectRow(cur_row)
-        elif self.is_live_sync and current_fp != self._last_fingerprint:
-            self._last_fingerprint = current_fp
-            cur_row = self.table.currentRow()
-            self.load_material(detected_mat)
-            if 0 <= cur_row < self.table.rowCount():
-                self.table.selectRow(cur_row)
+        is_multi = False
+        try:
+            is_multi = bool(rt.isKindOf(detected_mat, rt.Multimaterial) or rt.isKindOf(detected_mat, rt.multiSubMaterial))
+        except Exception:
+            is_multi = False
+
+        if is_multi:
+            if mat_handle != self._current_mat_handle:
+                self._current_mat_handle = mat_handle
+                self.load_material(detected_mat)
+            elif selection_changed and len(current_sel_handles) > 0:
+                # Reselected object(s) or selection changed in viewport: refresh material and scene object counts
+                self._last_fingerprint = current_fp
+                cur_row = self.table.currentRow()
+                self.load_material(detected_mat)
+                if 0 <= cur_row < self.table.rowCount():
+                    self.table.selectRow(cur_row)
+            elif self.is_live_sync and current_fp != self._last_fingerprint:
+                self._last_fingerprint = current_fp
+                cur_row = self.table.currentRow()
+                self.load_material(detected_mat)
+                if 0 <= cur_row < self.table.rowCount():
+                    self.table.selectRow(cur_row)
+            else:
+                self.update_button_states()
         else:
-            self.update_button_states()
+            # Single / Non-Multi Material (e.g. PhysicalMaterial, VRayMtl, CoronaPhysicalMtl, etc.)
+            if mat_handle != self._current_mat_handle or (selection_changed and len(current_sel_handles) > 0):
+                self._current_mat_handle = mat_handle
+                self._last_fingerprint = current_fp
+                self.load_single_material(detected_mat)
+            elif current_fp != self._last_fingerprint:
+                self._last_fingerprint = current_fp
+                self.load_single_material(detected_mat)
+            else:
+                self.update_button_states()
 
     def clear_ui(self):
         self.target_material = None
@@ -2095,13 +2145,56 @@ class MultiMaterialEditorUI(QDialog):
         self._current_scene_objs_using_mat = []
         self.is_loading = True
         self.table.setRowCount(0)
-        self.lbl_mat_name.setText("(No Multi/Sub-Object Selected)")
-        self.lbl_slot_count.setText("Select a Multi-Material node in SME or an object in viewport")
+        self.lbl_mat_name.setText("")
+        self.lbl_slot_count.setText("Slots: - | Used in scene: -")
         if hasattr(self, 'header_frame'):
-            self.header_frame.setToolTip("Select a Multi-Material node in SME or an object in viewport")
-        self.set_status("● Live Sync: Waiting for selection...")
+            self.header_frame.setToolTip("")
+        self.set_status("● Waiting for selection...")
         self.update_button_states()
         self.is_loading = False
+
+    def load_single_material(self, mat):
+        """Displays single (non-multi) material info and enables fast pick to SME."""
+        self.target_material = mat
+        if not mat or not rt:
+            return
+
+        self.is_loading = True
+        try:
+            mat_name = getattr(mat, 'name', 'Material')
+            try:
+                self._current_mat_handle = int(rt._jsh_MME_GetMatHandle(mat))
+            except Exception:
+                self._current_mat_handle = 0
+
+            try:
+                self._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(mat))
+            except Exception:
+                self._last_fingerprint = ""
+
+            try:
+                mat_class = str(rt.classOf(mat))
+            except Exception:
+                mat_class = "Material"
+
+            scene_objs = self.get_objects_using_material(mat)
+            self._current_scene_objs_using_mat = scene_objs
+
+            self.lbl_mat_name.setText(mat_name)
+            self.lbl_slot_count.setText("Type: {} | Used in scene: {} object(s)".format(mat_class, len(scene_objs)))
+            if hasattr(self, 'header_frame'):
+                self.header_frame.setToolTip("Click to open and select '{}' ({}) in Slate Material Editor".format(mat_name, mat_class))
+
+            self.slots_data = []
+            self.initial_id_map = {}
+            self.table.setRowCount(0)
+            self.set_status("● Single Material: '{}' ({})".format(mat_name, mat_class))
+            self.update_button_states()
+
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            self.is_loading = False
 
     def load_material(self, mat):
         self.target_material = mat
@@ -2784,6 +2877,13 @@ class MultiMaterialEditorUI(QDialog):
             self.btn_remove.setEnabled(can_remove)
         if hasattr(self, 'btn_duplicate'):
             self.btn_duplicate.setEnabled(has_mat)
+
+        if hasattr(self, 'chk_auto_renumber'):
+            self.chk_auto_renumber.setEnabled(has_mat)
+        if hasattr(self, 'chk_sync_names'):
+            self.chk_sync_names.setEnabled(has_mat)
+        if hasattr(self, 'chk_update_faces'):
+            self.chk_update_faces.setEnabled(has_mat)
 
         has_geo_sel = False
         if has_mat and len(self.slots_data) > 1 and rt:

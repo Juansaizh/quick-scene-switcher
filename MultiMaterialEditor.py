@@ -1846,11 +1846,6 @@ class MultiMaterialEditorUI(QDialog):
         self.btn_duplicate.clicked.connect(self.duplicate_selected_slot)
         tools_layout.addWidget(self.btn_duplicate)
 
-        self.btn_clean_empty = QPushButton("Clean Empty Slots", self)
-        self.btn_clean_empty.setToolTip("Remove all slots without assigned sub-materials and compact IDs sequentially")
-        self.btn_clean_empty.clicked.connect(self.clean_empty_slots)
-        tools_layout.addWidget(self.btn_clean_empty)
-
         tools_layout.addStretch(1)
 
         self.btn_fix_duplicates = QPushButton("Fix Duplicates", self)
@@ -2703,35 +2698,6 @@ class MultiMaterialEditorUI(QDialog):
         else:
             self.set_status("● Paused: Slot duplicated")
 
-    def clean_empty_slots(self):
-        if not self.target_material:
-            return
-        initial_count = len(self.slots_data)
-        cleaned = [s for s in self.slots_data if s['sub_mat'] is not None]
-
-        if len(cleaned) == 0:
-            QMessageBox.information(self, "Clean Empty Slots", "Cannot clean all slots. At least one slot must remain in the Multi-Material.")
-            return
-
-        if len(cleaned) == initial_count:
-            QMessageBox.information(self, "Clean Empty Slots", "No empty slots found to clean.")
-            return
-
-        removed_count = initial_count - len(cleaned)
-        reply = QMessageBox.question(
-            self,
-            "Confirm Clean Empty Slots",
-            "Found {} empty slot(s) without assigned sub-materials.\nDo you want to remove them and compact IDs?".format(removed_count),
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            self.slots_data = cleaned
-            self.force_renumber_ids(refresh_table=True)
-            if self.is_live_sync:
-                self.sync_to_max("Clean Empty Slots", update_geom=True)
-            else:
-                self.set_status("● Paused: Cleaned empty slots")
-
     def update_button_states(self):
         has_mat = bool(self.target_material is not None and len(self.slots_data) > 0)
         can_remove = bool(self.target_material is not None and len(self.slots_data) > 1)
@@ -2741,8 +2707,6 @@ class MultiMaterialEditorUI(QDialog):
             self.btn_remove.setEnabled(can_remove)
         if hasattr(self, 'btn_duplicate'):
             self.btn_duplicate.setEnabled(has_mat)
-        if hasattr(self, 'btn_clean_empty'):
-            self.btn_clean_empty.setEnabled(can_remove)
 
         has_geo_sel = False
         if has_mat and len(self.slots_data) > 1 and rt:

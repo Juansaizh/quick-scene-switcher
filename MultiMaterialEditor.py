@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ========================================================================
-SCRIPT: MultiMaterialManager
+SCRIPT: MultiMaterialEditor
 VERSION: 1.0.0
 AUTHOR: Juan Saiz Huerta
 COPYRIGHT: (c) 2026 Juan Saiz Huerta
@@ -67,24 +67,24 @@ except ImportError:
     def get_max_main_window():
         return None
 
-_CURRENT_JSH_MMM_DIALOG = None
+_CURRENT_JSH_MME_DIALOG = None
 
 
 def get_config_file_path():
-    """Returns the path to the MultiMaterialManager.ini settings file in 3ds Max plugcfg or local directory."""
+    """Returns the path to the MultiMaterialEditor.ini settings file in 3ds Max plugcfg or local directory."""
     try:
         if rt:
             plugcfg_dir = str(rt.getDir(rt.name("plugcfg")))
             if plugcfg_dir and os.path.isdir(plugcfg_dir):
-                return os.path.join(plugcfg_dir, "MultiMaterialManager.ini")
+                return os.path.join(plugcfg_dir, "MultiMaterialEditor.ini")
     except Exception:
         pass
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(script_dir, "MultiMaterialManager.ini")
+    return os.path.join(script_dir, "MultiMaterialEditor.ini")
 
 
 def load_config_settings():
-    """Loads checkbox and manager preferences from MultiMaterialManager.ini."""
+    """Loads checkbox and editor preferences from MultiMaterialEditor.ini."""
     ini_path = get_config_file_path()
     settings = {
         'auto_renumber_ids': True,
@@ -103,12 +103,12 @@ def load_config_settings():
                 if config.has_option('Options', 'update_ids_on_geometry'):
                     settings['update_ids_on_geometry'] = config.getboolean('Options', 'update_ids_on_geometry', fallback=False)
         except Exception as e:
-            print("[MultiMaterialManager] Error loading INI settings: {}".format(e))
+            print("[MultiMaterialEditor] Error loading INI settings: {}".format(e))
     return settings
 
 
 def save_config_settings(settings_dict):
-    """Saves checkbox and manager preferences to MultiMaterialManager.ini."""
+    """Saves checkbox and editor preferences to MultiMaterialEditor.ini."""
     ini_path = get_config_file_path()
     try:
         config = configparser.ConfigParser()
@@ -124,7 +124,7 @@ def save_config_settings(settings_dict):
         with open(ini_path, 'w', encoding='utf-8') as f:
             config.write(f)
     except Exception as e:
-        print("[MultiMaterialManager] Error saving INI settings: {}".format(e))
+        print("[MultiMaterialEditor] Error saving INI settings: {}".format(e))
 
 
 
@@ -156,14 +156,14 @@ def srgb_to_linear_rgb(qcolor):
 
 def get_cached_checkmark_icon_path():
     """Returns the path to the cached checkmark icon for QSS checkboxes."""
-    cache_dir = os.path.join(os.path.expanduser("~"), ".jsh_mmm_cache")
+    cache_dir = os.path.join(os.path.expanduser("~"), ".jsh_mme_cache")
     if not os.path.exists(cache_dir):
         try:
             os.makedirs(cache_dir)
         except Exception:
             cache_dir = os.environ.get("TEMP", "C:/Temp")
 
-    icon_path = os.path.join(cache_dir, "jsh_mmm_white_check.png").replace("\\", "/")
+    icon_path = os.path.join(cache_dir, "jsh_mme_white_check.png").replace("\\", "/")
     if not os.path.exists(icon_path):
         try:
             pix = QPixmap(16, 16)
@@ -186,22 +186,22 @@ def init_maxscript_helpers():
     if not rt:
         return
     mxs_code = """
-    global _jsh_MMM_GetSelectedMultiMaterial
-    global _jsh_MMM_GetMultiMatData
-    global _jsh_MMM_ApplyMultiMatData
-    global _jsh_MMM_SetSubMaterialColor
-    global _jsh_MMM_UpdateFaceIDs
-    global _jsh_MMM_UpdateEditPolyFaceIDs
-    global _jsh_MMM_GetFaceIDCounts
-    global _jsh_MMM_GetMatFingerprint
-    global _jsh_MMM_GetMatHandle
-    global _jsh_MMM_CloneMaterial
-    global _jsh_MMM_OpenInSME
-    global _jsh_MMM_SetSlotName
-    global _jsh_MMM_SetSlotID
-    global _jsh_MMM_SetSlotEnabled
+    global _jsh_MME_GetSelectedMultiMaterial
+    global _jsh_MME_GetMultiMatData
+    global _jsh_MME_ApplyMultiMatData
+    global _jsh_MME_SetSubMaterialColor
+    global _jsh_MME_UpdateFaceIDs
+    global _jsh_MME_UpdateEditPolyFaceIDs
+    global _jsh_MME_GetFaceIDCounts
+    global _jsh_MME_GetMatFingerprint
+    global _jsh_MME_GetMatHandle
+    global _jsh_MME_CloneMaterial
+    global _jsh_MME_OpenInSME
+    global _jsh_MME_SetSlotName
+    global _jsh_MME_SetSlotID
+    global _jsh_MME_SetSlotEnabled
 
-    fn _jsh_MMM_CloneMaterial mat = (
+    fn _jsh_MME_CloneMaterial mat = (
         if mat == undefined or not isValidObj mat do return undefined
         try (
             local newMat = copy mat
@@ -211,7 +211,7 @@ def init_maxscript_helpers():
         )
     )
 
-    fn _jsh_MMM_OpenInSME subMat = (
+    fn _jsh_MME_OpenInSME subMat = (
         if subMat == undefined or not isValidObj subMat do return false
         try (
             if sme != undefined do (
@@ -295,7 +295,7 @@ def init_maxscript_helpers():
         false
     )
 
-    fn _jsh_MMM_GetSelectedMultiMaterial = (
+    fn _jsh_MME_GetSelectedMultiMaterial = (
         try (
             if selection != undefined and selection.count > 0 do (
                 for obj in selection do (
@@ -337,7 +337,7 @@ def init_maxscript_helpers():
         undefined
     )
 
-    fn _jsh_MMM_GetMatHandle mat = (
+    fn _jsh_MME_GetMatHandle mat = (
         if mat == undefined or not isValidObj mat do return 0
         try (
             return (getHandleByAnim mat) as integer
@@ -346,7 +346,7 @@ def init_maxscript_helpers():
         )
     )
 
-    fn _jsh_MMM_GetMatFingerprint mat = (
+    fn _jsh_MME_GetMatFingerprint mat = (
         try (
             if mat == undefined or not isValidObj mat or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return ""
             
@@ -414,7 +414,7 @@ def init_maxscript_helpers():
         )
     )
 
-    fn _jsh_MMM_GetMultiMatData mat = (
+    fn _jsh_MME_GetMultiMatData mat = (
         if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return undefined
         
         -- Read-only check: determine effective slot count ignoring trailing undefined slots with duplicate IDs
@@ -483,7 +483,7 @@ def init_maxscript_helpers():
         result
     )
 
-    fn _jsh_MMM_GetSubMaterialColor subMat = (
+    fn _jsh_MME_GetSubMaterialColor subMat = (
         if subMat == undefined or not isValidObj subMat do return undefined
         local col = undefined
         try (
@@ -497,7 +497,7 @@ def init_maxscript_helpers():
         col
     )
 
-    fn _jsh_MMM_AreSubMaterialsIdentical m1 m2 = (
+    fn _jsh_MME_AreSubMaterialsIdentical m1 m2 = (
         if m1 == undefined or m2 == undefined do return false
         if m1 == m2 do return true
         try (
@@ -506,15 +506,15 @@ def init_maxscript_helpers():
         if (classOf m1) != (classOf m2) do return false
         if (m1.name as string) != (m2.name as string) do return false
         
-        local c1 = _jsh_MMM_GetSubMaterialColor m1
-        local c2 = _jsh_MMM_GetSubMaterialColor m2
+        local c1 = _jsh_MME_GetSubMaterialColor m1
+        local c2 = _jsh_MME_GetSubMaterialColor m2
         if c1 != undefined and c2 != undefined do (
             if (c1.r as integer) != (c2.r as integer) or (c1.g as integer) != (c2.g as integer) or (c1.b as integer) != (c2.b as integer) do return false
         )
         return true
     )
 
-    fn _jsh_MMM_SetSubMaterialColor subMat r g b = (
+    fn _jsh_MME_SetSubMaterialColor subMat r g b = (
         if subMat == undefined or not isValidObj subMat do return false
         local newCol = color r g b
         try (
@@ -530,7 +530,7 @@ def init_maxscript_helpers():
         true
     )
 
-    fn _jsh_MMM_ApplyMultiMatData mat count subMats names ids enableds = (
+    fn _jsh_MME_ApplyMultiMatData mat count subMats names ids enableds = (
         if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) or count < 1 do return false
         
         while mat.materialList.count > count do (
@@ -558,7 +558,7 @@ def init_maxscript_helpers():
         true
     )
 
-    fn _jsh_MMM_SetSlotName mat slotIndex newName syncSubMat = (
+    fn _jsh_MME_SetSlotName mat slotIndex newName syncSubMat = (
         if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
         if slotIndex < 1 or slotIndex > mat.numsubs do return false
         try (
@@ -578,7 +578,7 @@ def init_maxscript_helpers():
         )
     )
 
-    fn _jsh_MMM_SetSlotID mat slotIndex newID = (
+    fn _jsh_MME_SetSlotID mat slotIndex newID = (
         if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
         if slotIndex < 1 or slotIndex > mat.numsubs do return false
         try (
@@ -591,7 +591,7 @@ def init_maxscript_helpers():
         )
     )
 
-    fn _jsh_MMM_SetSlotEnabled mat slotIndex isEnabled = (
+    fn _jsh_MME_SetSlotEnabled mat slotIndex isEnabled = (
         if mat == undefined or not (isKindOf mat Multimaterial or isKindOf mat multiSubMaterial) do return false
         if slotIndex < 1 or slotIndex > mat.numsubs do return false
         try (
@@ -604,7 +604,7 @@ def init_maxscript_helpers():
         )
     )
 
-    fn _jsh_MMM_ClearSubObjectSelection obj = (
+    fn _jsh_MME_ClearSubObjectSelection obj = (
         if obj == undefined or not isValidNode obj do return ()
         try ( setCommandPanelTaskMode #create ) catch()
         try (
@@ -642,7 +642,7 @@ def init_maxscript_helpers():
         ) catch()
     )
 
-    fn _jsh_MMM_UpdateEditPolyFaceIDs obj epMod oldIDs newIDs = (
+    fn _jsh_MME_UpdateEditPolyFaceIDs obj epMod oldIDs newIDs = (
         if obj == undefined or not isValidNode obj or epMod == undefined do return 0
         local count = 0
         local maxHwnd = windows.getMAXHWND()
@@ -724,12 +724,12 @@ def init_maxscript_helpers():
         count
     )
 
-    fn _jsh_MMM_UpdateFaceIDs obj oldIDs newIDs = (
+    fn _jsh_MME_UpdateFaceIDs obj oldIDs newIDs = (
         if obj == undefined or not isValidNode obj do return 0
         local count = 0
         
         -- Clear any active sub-object polygon/element/vertex selections
-        _jsh_MMM_ClearSubObjectSelection obj
+        _jsh_MME_ClearSubObjectSelection obj
         
         local hasModifiers = (isProperty obj #modifiers and obj.modifiers.count > 0)
         
@@ -740,7 +740,7 @@ def init_maxscript_helpers():
                 ep = Edit_Poly()
                 addModifier obj ep
             )
-            count = _jsh_MMM_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
+            count = _jsh_MME_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
         ) else (
             -- Fast, direct in-memory method for collapsed Editable_Poly / Editable_Mesh
             local target = if (isProperty obj #baseObject and isValidObj obj.baseObject) then obj.baseObject else obj
@@ -796,7 +796,7 @@ def init_maxscript_helpers():
             ) else (
                 local ep = Edit_Poly()
                 addModifier obj ep
-                count = _jsh_MMM_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
+                count = _jsh_MME_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
             )
             try ( redrawViews() ) catch()
         )
@@ -804,7 +804,7 @@ def init_maxscript_helpers():
         count
     )
 
-    fn _jsh_MMM_GetFaceIDCounts obj = (
+    fn _jsh_MME_GetFaceIDCounts obj = (
         local result = #()
         if obj == undefined or not isValidNode obj do return result
         
@@ -1121,13 +1121,13 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
 
                 if hasattr(main_ui, 'is_live_sync') and main_ui.is_live_sync and main_ui.target_material and rt:
                     try:
-                        rt._jsh_MMM_SetSlotName(main_ui.target_material, row + 1, new_name, sync_sub)
+                        rt._jsh_MME_SetSlotName(main_ui.target_material, row + 1, new_name, sync_sub)
                         if sync_sub and new_name:
                             main_ui.set_status("● Live Sync: Sub-material renamed to '{}'".format(new_name))
                         else:
                             main_ui.set_status("● Live Sync: Slot renamed to '{}'".format(new_name))
                         try:
-                            main_ui._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(main_ui.target_material))
+                            main_ui._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(main_ui.target_material))
                         except Exception:
                             pass
                     except Exception as e:
@@ -1151,10 +1151,10 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
                     if hasattr(main_ui, 'is_live_sync') and main_ui.is_live_sync:
                         if main_ui.target_material and rt:
                             try:
-                                rt._jsh_MMM_SetSlotEnabled(main_ui.target_material, row + 1, slot['enabled'])
+                                rt._jsh_MME_SetSlotEnabled(main_ui.target_material, row + 1, slot['enabled'])
                                 main_ui.set_status("● Live Sync: Slot #{} {}".format(slot['id'], "Enabled" if slot['enabled'] else "Disabled"))
                                 try:
-                                    main_ui._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(main_ui.target_material))
+                                    main_ui._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(main_ui.target_material))
                                 except Exception:
                                     pass
                             except Exception:
@@ -1550,10 +1550,10 @@ class ReorderableTableWidget(QTableWidget):
         super(ReorderableTableWidget, self).paintEvent(event)
 
 
-class MultiMaterialManagerUI(QDialog):
+class MultiMaterialEditorUI(QDialog):
     def __init__(self, target_material=None, parent=None):
         max_parent = parent if parent is not None else get_max_main_window()
-        super(MultiMaterialManagerUI, self).__init__(max_parent)
+        super(MultiMaterialEditorUI, self).__init__(max_parent)
 
         init_maxscript_helpers()
         self.target_material = target_material
@@ -1568,7 +1568,7 @@ class MultiMaterialManagerUI(QDialog):
         self._backup_slots_data = None
         self.is_loading = False
 
-        self.setWindowTitle("Multi-Material Manager")
+        self.setWindowTitle("JSH | Multi-Material Editor")
         self.resize(750, 570)
         self.setMinimumSize(620, 420)
         self.setWindowFlags((self.windowFlags() | Qt.Window) & ~Qt.WindowContextHelpButtonHint)
@@ -1598,7 +1598,7 @@ class MultiMaterialManagerUI(QDialog):
         self.save_checkbox_settings()
         if hasattr(self, '_sync_timer') and self._sync_timer.isActive():
             self._sync_timer.stop()
-        super(MultiMaterialManagerUI, self).closeEvent(event)
+        super(MultiMaterialEditorUI, self).closeEvent(event)
 
     def setup_style(self):
         check_icon = get_cached_checkmark_icon_path()
@@ -1982,7 +1982,7 @@ class MultiMaterialManagerUI(QDialog):
         self.update_button_states()
 
         try:
-            detected_mat = rt._jsh_MMM_GetSelectedMultiMaterial()
+            detected_mat = rt._jsh_MME_GetSelectedMultiMaterial()
             if str(detected_mat) == "undefined" or detected_mat is None:
                 detected_mat = None
         except Exception:
@@ -1998,7 +1998,7 @@ class MultiMaterialManagerUI(QDialog):
                 return
 
         try:
-            mat_handle = int(rt._jsh_MMM_GetMatHandle(detected_mat))
+            mat_handle = int(rt._jsh_MME_GetMatHandle(detected_mat))
         except Exception:
             mat_handle = 0
 
@@ -2008,7 +2008,7 @@ class MultiMaterialManagerUI(QDialog):
             return
 
         try:
-            current_fp = str(rt._jsh_MMM_GetMatFingerprint(detected_mat))
+            current_fp = str(rt._jsh_MME_GetMatFingerprint(detected_mat))
         except Exception:
             current_fp = ""
 
@@ -2050,23 +2050,23 @@ class MultiMaterialManagerUI(QDialog):
             mat_name = getattr(mat, 'name', 'Multi/Sub-Object')
 
             try:
-                self._current_mat_handle = int(rt._jsh_MMM_GetMatHandle(mat))
+                self._current_mat_handle = int(rt._jsh_MME_GetMatHandle(mat))
             except Exception:
                 self._current_mat_handle = 0
 
             try:
-                self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(mat))
+                self._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(mat))
             except Exception:
                 self._last_fingerprint = ""
 
-            if not hasattr(rt, '_jsh_MMM_GetMultiMatData') or rt._jsh_MMM_GetMultiMatData is None:
+            if not hasattr(rt, '_jsh_MME_GetMultiMatData') or rt._jsh_MME_GetMultiMatData is None:
                 init_maxscript_helpers()
 
-            if not rt or not hasattr(rt, '_jsh_MMM_GetMultiMatData') or rt._jsh_MMM_GetMultiMatData is None:
+            if not rt or not hasattr(rt, '_jsh_MME_GetMultiMatData') or rt._jsh_MME_GetMultiMatData is None:
                 self.is_loading = False
                 return
 
-            raw_slots = rt._jsh_MMM_GetMultiMatData(mat)
+            raw_slots = rt._jsh_MME_GetMultiMatData(mat)
             if raw_slots is None or str(raw_slots) == "undefined":
                 self.is_loading = False
                 return
@@ -2149,7 +2149,7 @@ class MultiMaterialManagerUI(QDialog):
             return []
         objs = []
         try:
-            target_handle = int(rt._jsh_MMM_GetMatHandle(target_mat))
+            target_handle = int(rt._jsh_MME_GetMatHandle(target_mat))
             if target_handle == 0:
                 return []
             for obj in list(rt.objects):
@@ -2157,7 +2157,7 @@ class MultiMaterialManagerUI(QDialog):
                     mat = getattr(obj, 'material', None)
                     if mat is not None and str(mat) != "undefined":
                         try:
-                            if int(rt._jsh_MMM_GetMatHandle(mat)) == target_handle:
+                            if int(rt._jsh_MME_GetMatHandle(mat)) == target_handle:
                                 objs.append(obj)
                         except Exception:
                             if mat == target_mat:
@@ -2174,7 +2174,7 @@ class MultiMaterialManagerUI(QDialog):
 
         try:
             for obj in scene_objs:
-                id_counts = rt._jsh_MMM_GetFaceIDCounts(obj)
+                id_counts = rt._jsh_MME_GetFaceIDCounts(obj)
                 if id_counts:
                     for entry in list(id_counts):
                         fid = int(entry[0])
@@ -2207,7 +2207,7 @@ class MultiMaterialManagerUI(QDialog):
                 rt.append(ids_arr, int(slot['id']))
                 rt.append(enableds_arr, bool(slot['enabled']))
 
-            rt._jsh_MMM_ApplyMultiMatData(mat, count, submats_arr, names_arr, ids_arr, enableds_arr)
+            rt._jsh_MME_ApplyMultiMatData(mat, count, submats_arr, names_arr, ids_arr, enableds_arr)
 
             faces_updated_count = 0
             if update_geom and self.chk_update_faces.isChecked():
@@ -2229,7 +2229,7 @@ class MultiMaterialManagerUI(QDialog):
                         new_ids_arr = rt.execute("#({})".format(new_ids_str))
                         for obj in scene_objs:
                             try:
-                                faces_updated_count += int(rt._jsh_MMM_UpdateFaceIDs(obj, old_ids_arr, new_ids_arr))
+                                faces_updated_count += int(rt._jsh_MME_UpdateFaceIDs(obj, old_ids_arr, new_ids_arr))
                             except Exception as err:
                                 print("Error updating face IDs on object {}: {}".format(getattr(obj, 'name', 'obj'), err))
 
@@ -2243,7 +2243,7 @@ class MultiMaterialManagerUI(QDialog):
                 s['initial_id'] = s['id']
 
             try:
-                self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(mat))
+                self._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(mat))
             except Exception:
                 pass
 
@@ -2275,7 +2275,7 @@ class MultiMaterialManagerUI(QDialog):
             if sub_mat and color:
                 try:
                     lin_r, lin_g, lin_b = srgb_to_linear_rgb(color)
-                    rt._jsh_MMM_SetSubMaterialColor(sub_mat, lin_r, lin_g, lin_b)
+                    rt._jsh_MME_SetSubMaterialColor(sub_mat, lin_r, lin_g, lin_b)
                 except Exception:
                     pass
 
@@ -2393,10 +2393,10 @@ class MultiMaterialManagerUI(QDialog):
 
         if rt:
             try:
-                if not hasattr(rt, '_jsh_MMM_OpenInSME') or rt._jsh_MMM_OpenInSME is None:
+                if not hasattr(rt, '_jsh_MME_OpenInSME') or rt._jsh_MME_OpenInSME is None:
                     init_maxscript_helpers()
 
-                success = bool(rt._jsh_MMM_OpenInSME(sub_mat))
+                success = bool(rt._jsh_MME_OpenInSME(sub_mat))
                 if success:
                     self.set_status("● Slate Editor: Focused '{}'".format(slot.get('sub_mat_name', 'Material')))
                 else:
@@ -2412,10 +2412,10 @@ class MultiMaterialManagerUI(QDialog):
             return
         if rt:
             try:
-                if not hasattr(rt, '_jsh_MMM_OpenInSME') or rt._jsh_MMM_OpenInSME is None:
+                if not hasattr(rt, '_jsh_MME_OpenInSME') or rt._jsh_MME_OpenInSME is None:
                     init_maxscript_helpers()
 
-                success = bool(rt._jsh_MMM_OpenInSME(self.target_material))
+                success = bool(rt._jsh_MME_OpenInSME(self.target_material))
                 mat_name = getattr(self.target_material, 'name', 'MultiMaterial')
                 if success:
                     self.set_status("● Slate Editor: Focused '{}'".format(mat_name))
@@ -2463,7 +2463,7 @@ class MultiMaterialManagerUI(QDialog):
             if rt:
                 rt.theHold.Begin()
                 try:
-                    rt._jsh_MMM_SetSubMaterialColor(sub_mat, lin_r, lin_g, lin_b)
+                    rt._jsh_MME_SetSubMaterialColor(sub_mat, lin_r, lin_g, lin_b)
                     if self.target_material:
                         try:
                             rt.notifyDependents(self.target_material)
@@ -2482,7 +2482,7 @@ class MultiMaterialManagerUI(QDialog):
                     rt.theHold.Accept("Change Material Color")
                     self.set_status("● Live Sync: Color updated")
                     try:
-                        self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
+                        self._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(self.target_material))
                     except Exception:
                         pass
                 except Exception as e:
@@ -2548,10 +2548,10 @@ class MultiMaterialManagerUI(QDialog):
                             self.sync_to_max("Change Slot ID", update_geom=True)
                         else:
                             try:
-                                rt._jsh_MMM_SetSlotID(self.target_material, row + 1, new_id)
+                                rt._jsh_MME_SetSlotID(self.target_material, row + 1, new_id)
                                 self.set_status("● Live Sync: ID changed")
                                 try:
-                                    self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
+                                    self._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(self.target_material))
                                 except Exception:
                                     pass
                             except Exception:
@@ -2581,10 +2581,10 @@ class MultiMaterialManagerUI(QDialog):
                 if self.is_live_sync and self.target_material and rt:
                     try:
                         sync_sub = bool(self.chk_sync_names.isChecked() and slot.get('sub_mat') is not None)
-                        rt._jsh_MMM_SetSlotName(self.target_material, row + 1, new_name, sync_sub)
+                        rt._jsh_MME_SetSlotName(self.target_material, row + 1, new_name, sync_sub)
                         self.set_status("● Live Sync: Slot renamed")
                         try:
-                            self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
+                            self._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(self.target_material))
                         except Exception:
                             pass
                     except Exception as e:
@@ -2656,8 +2656,8 @@ class MultiMaterialManagerUI(QDialog):
         src_sub_mat = src_slot.get('sub_mat')
         if src_sub_mat is not None and rt:
             try:
-                if hasattr(rt, '_jsh_MMM_CloneMaterial'):
-                    new_sub_mat = rt._jsh_MMM_CloneMaterial(src_sub_mat)
+                if hasattr(rt, '_jsh_MME_CloneMaterial'):
+                    new_sub_mat = rt._jsh_MME_CloneMaterial(src_sub_mat)
                 else:
                     new_sub_mat = rt.copy(src_sub_mat)
 
@@ -2792,9 +2792,9 @@ class MultiMaterialManagerUI(QDialog):
                     continue
 
                 is_dup = False
-                if rt and hasattr(rt, '_jsh_MMM_AreSubMaterialsIdentical'):
+                if rt and hasattr(rt, '_jsh_MME_AreSubMaterialsIdentical'):
                     try:
-                        is_dup = bool(rt._jsh_MMM_AreSubMaterialsIdentical(sub_a, sub_b))
+                        is_dup = bool(rt._jsh_MME_AreSubMaterialsIdentical(sub_a, sub_b))
                     except Exception:
                         is_dup = False
 
@@ -2844,7 +2844,7 @@ class MultiMaterialManagerUI(QDialog):
 
         for obj in selected_objs:
             try:
-                rt._jsh_MMM_ClearSubObjectSelection(obj)
+                rt._jsh_MME_ClearSubObjectSelection(obj)
             except Exception:
                 pass
 
@@ -2915,8 +2915,8 @@ class MultiMaterialManagerUI(QDialog):
             # Material Isolation: If shared with unselected objects, clone the MultiMaterial
             if is_shared:
                 try:
-                    if hasattr(rt, '_jsh_MMM_CloneMaterial'):
-                        cloned_mat = rt._jsh_MMM_CloneMaterial(self.target_material)
+                    if hasattr(rt, '_jsh_MME_CloneMaterial'):
+                        cloned_mat = rt._jsh_MME_CloneMaterial(self.target_material)
                     else:
                         cloned_mat = rt.copy(self.target_material)
                     if cloned_mat and str(cloned_mat) != "undefined":
@@ -2973,7 +2973,7 @@ class MultiMaterialManagerUI(QDialog):
             if has_id_changes:
                 for obj in selected_objs:
                     try:
-                        rt._jsh_MMM_UpdateFaceIDs(obj, old_ids, new_ids)
+                        rt._jsh_MME_UpdateFaceIDs(obj, old_ids, new_ids)
                     except Exception as geo_err:
                         print("Error updating face IDs on {}: {}".format(getattr(obj, 'name', 'object'), geo_err))
 
@@ -2983,12 +2983,12 @@ class MultiMaterialManagerUI(QDialog):
             ids = [s.get('id', i + 1) for i, s in enumerate(self.slots_data)]
             enableds = [s.get('enabled', True) for s in self.slots_data]
 
-            rt._jsh_MMM_ApplyMultiMatData(self.target_material, len(self.slots_data), sub_mats, names, ids, enableds)
+            rt._jsh_MME_ApplyMultiMatData(self.target_material, len(self.slots_data), sub_mats, names, ids, enableds)
 
             rt.theHold.Accept("Fix Duplicate Sub-Materials")
 
             try:
-                self._last_fingerprint = str(rt._jsh_MMM_GetMatFingerprint(self.target_material))
+                self._last_fingerprint = str(rt._jsh_MME_GetMatFingerprint(self.target_material))
             except Exception:
                 pass
 
@@ -3005,19 +3005,19 @@ class MultiMaterialManagerUI(QDialog):
 
 
 def show_ui(target_material=None):
-    """Launches the Multi-Material Manager window."""
-    global _CURRENT_JSH_MMM_DIALOG
-    if _CURRENT_JSH_MMM_DIALOG is not None:
+    """Launches the Multi-Material Editor window."""
+    global _CURRENT_JSH_MME_DIALOG
+    if _CURRENT_JSH_MME_DIALOG is not None:
         try:
-            _CURRENT_JSH_MMM_DIALOG.close()
-            _CURRENT_JSH_MMM_DIALOG.deleteLater()
+            _CURRENT_JSH_MME_DIALOG.close()
+            _CURRENT_JSH_MME_DIALOG.deleteLater()
         except Exception:
             pass
-        _CURRENT_JSH_MMM_DIALOG = None
+        _CURRENT_JSH_MME_DIALOG = None
 
-    _CURRENT_JSH_MMM_DIALOG = MultiMaterialManagerUI(target_material=target_material)
-    _CURRENT_JSH_MMM_DIALOG.show()
-    return _CURRENT_JSH_MMM_DIALOG
+    _CURRENT_JSH_MME_DIALOG = MultiMaterialEditorUI(target_material=target_material)
+    _CURRENT_JSH_MME_DIALOG.show()
+    return _CURRENT_JSH_MME_DIALOG
 
 
 if __name__ == "__main__":

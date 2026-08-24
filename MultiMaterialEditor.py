@@ -671,6 +671,7 @@ def init_maxscript_helpers():
 
     fn _jsh_MME_ClearSubObjectSelection obj = (
         if obj == undefined or not isValidNode obj do return ()
+        local origMode = getCommandPanelTaskMode()
         try ( setCommandPanelTaskMode #create ) catch()
         try (
             if isKindOf obj Editable_Poly or (isProperty obj #baseObject and isKindOf obj.baseObject Editable_Poly) do (
@@ -703,6 +704,11 @@ def init_maxscript_helpers():
                         try ( setVertSelection obj m #{} ) catch()
                     )
                 )
+            )
+        ) catch()
+        try (
+            if origMode != undefined and (getCommandPanelTaskMode() != origMode) do (
+                setCommandPanelTaskMode origMode
             )
         ) catch()
     )

@@ -802,7 +802,7 @@ def init_maxscript_helpers():
             local topMod = obj.modifiers[1]
             local ep = if isKindOf topMod Edit_Poly then topMod else undefined
             if ep == undefined do (
-                ep = Edit_Poly()
+                ep = Edit_Poly name:"Edit Poly (Modified IDs)"
                 addModifier obj ep
             )
             count = _jsh_MME_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
@@ -859,7 +859,7 @@ def init_maxscript_helpers():
                     try ( update obj ) catch()
                 )
             ) else (
-                local ep = Edit_Poly()
+                local ep = Edit_Poly name:"Edit Poly (Modified IDs)"
                 addModifier obj ep
                 count = _jsh_MME_UpdateEditPolyFaceIDs obj ep oldIDs newIDs
             )

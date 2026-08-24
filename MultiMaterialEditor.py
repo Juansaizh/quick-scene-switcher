@@ -1700,7 +1700,7 @@ class MultiMaterialEditorUI(QDialog):
         self.is_locked = False
         self.is_loading = False
 
-        self.setWindowTitle("JSH | Multi-Material Editor")
+        self.setWindowTitle("Multi-Material Editor | JSH")
         self.resize(750, 570)
         self.setMinimumSize(620, 420)
         self.setWindowFlags((self.windowFlags() | Qt.Window) & ~Qt.WindowContextHelpButtonHint)

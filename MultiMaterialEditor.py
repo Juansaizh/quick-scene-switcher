@@ -1966,7 +1966,7 @@ class MultiMaterialEditorUI(QDialog):
 
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
-        self.lbl_mat_name = QLabel("", self)
+        self.lbl_mat_name = QLabel("Material name", self)
         self.lbl_mat_name.setObjectName("matTitle")
         self.lbl_mat_name.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
@@ -2293,8 +2293,8 @@ class MultiMaterialEditorUI(QDialog):
         self._current_scene_objs_using_mat = []
         self.is_loading = True
         self.table.setRowCount(0)
-        self.lbl_mat_name.setText("")
-        self.lbl_slot_count.setText("Slots: - | Used in scene: -")
+        self.lbl_mat_name.setText("Material name")
+        self.lbl_slot_count.setText("Slots:   | Used in scene: ")
         self.set_status("● Waiting for selection...")
         self.update_button_states()
         self.is_loading = False
@@ -2663,7 +2663,7 @@ class MultiMaterialEditorUI(QDialog):
             return
 
         if not self.target_material:
-            self.lbl_slot_count.setText("Slots: - | Used in scene: -")
+            self.lbl_slot_count.setText("Slots:   | Used in scene:")
             return
 
         is_multi = bool(len(self.slots_data) > 0)
@@ -3035,11 +3035,11 @@ class MultiMaterialEditorUI(QDialog):
             self.btn_duplicate.setEnabled(has_mat)
 
         if hasattr(self, 'chk_auto_renumber'):
-            self.chk_auto_renumber.setEnabled(has_mat)
+            self.chk_auto_renumber.setEnabled(True)
         if hasattr(self, 'chk_sync_names'):
-            self.chk_sync_names.setEnabled(has_mat)
+            self.chk_sync_names.setEnabled(True)
         if hasattr(self, 'chk_update_faces'):
-            self.chk_update_faces.setEnabled(has_mat)
+            self.chk_update_faces.setEnabled(True)
 
         has_geo_sel = False
         if has_mat and len(self.slots_data) > 1 and rt:

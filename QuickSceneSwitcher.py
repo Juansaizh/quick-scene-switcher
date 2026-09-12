@@ -337,14 +337,14 @@ class DropListWidget(QtWidgets.QListWidget):
 
 class SceneSwitcherUI(QtWidgets.QDockWidget):
     def __init__(self, parent=None):
-        if parent is None:
-            parent = QtWidgets.QWidget.find(rt.windows.getMAXHWND())
         super().__init__(parent)
 
         self.setWindowTitle("Quick Scene Switcher")
         self.resize(350, 500)
+        self.setMinimumSize(280, 350)
         self.current_scene_path = ""
         self._current_sort_state = "default"
+        self._resize_margin = 8
 
         self.setObjectName("SceneSwitcherDock")
         self.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
@@ -364,6 +364,58 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             rt.execute('global QSS_OrangeMarkedScenes = #()')
         except:
             pass
+
+    def nativeEvent(self, eventType, message):
+        """
+        Provides a generous, easy-to-grab resize border for 3ds Max docking widgets
+        when floating by intercepting Windows WM_NCHITTEST messages.
+        """
+        ev_str = str(eventType)
+        if "windows_generic_MSG" in ev_str and self.isFloating():
+            try:
+                import ctypes
+                from ctypes import wintypes
+
+                # message can be a SIP/Shiboken void pointer; int(message) gets the memory address
+                msg = wintypes.MSG.from_address(int(message))
+                if msg.message == 0x0084:  # WM_NCHITTEST
+                    # Screen coordinates in physical pixels from lParam
+                    x = ctypes.c_short(msg.lParam & 0xFFFF).value
+                    y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
+
+                    # Query physical window bounding rect directly from Win32
+                    user32 = ctypes.windll.user32
+                    rect = wintypes.RECT()
+                    user32.GetWindowRect(int(self.winId()), ctypes.byref(rect))
+
+                    m = getattr(self, "_resize_margin", 8)
+
+                    on_left = (rect.left <= x < rect.left + m)
+                    on_right = (rect.right - m < x <= rect.right)
+                    on_top = (rect.top <= y < rect.top + m)
+                    on_bottom = (rect.bottom - m < y <= rect.bottom)
+
+                    # Return hit-test codes:
+                    if on_top and on_left:
+                        return True, 13  # HTTOPLEFT
+                    if on_top and on_right:
+                        return True, 14  # HTTOPRIGHT
+                    if on_bottom and on_left:
+                        return True, 16  # HTBOTTOMLEFT
+                    if on_bottom and on_right:
+                        return True, 17  # HTBOTTOMRIGHT
+                    if on_left:
+                        return True, 10  # HTLEFT
+                    if on_right:
+                        return True, 11  # HTRIGHT
+                    if on_top:
+                        return True, 12  # HTTOP
+                    if on_bottom:
+                        return True, 15  # HTBOTTOM
+            except Exception:
+                pass
+
+        return super().nativeEvent(eventType, message)
 
     def closeEvent(self, event):
         if hasattr(self, 'dirty_timer'):
@@ -936,7 +988,6 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         }
         QDialog, QDockWidget {
             background-color: #444444;
-            border: 1px solid #333;
         }
         QLabel {
             color: #ffffff;
@@ -1090,8 +1141,6 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.master_cyan_checkbox.setChecked(False)
         # Force UI update for button state (will be "Save" since list is cleared below)
         self.check_cyan_markers_state() 
-
-        self.scene_list.clear()
 
         self.scene_list.clear()
         self.file_timestamps = {}
@@ -1893,20 +1942,53 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             # print(f"Paste Error: {e}")
             pass
 
+_CURRENT_SCENE_SWITCHER_INSTANCE = None
+
 def run_max_ui():
+    global _CURRENT_SCENE_SWITCHER_INSTANCE
+    if _CURRENT_SCENE_SWITCHER_INSTANCE is not None:
+        try:
+            _CURRENT_SCENE_SWITCHER_INSTANCE.close()
+            _CURRENT_SCENE_SWITCHER_INSTANCE.deleteLater()
+        except Exception:
+            pass
+        _CURRENT_SCENE_SWITCHER_INSTANCE = None
+
     app = QtWidgets.QApplication.instance()
     if not app:
         app = QtWidgets.QApplication(sys.argv)
 
+    # Close any existing instances that might be lingering
     for widget in app.topLevelWidgets():
-        if widget.objectName() == "SceneSwitcherDock":
-            widget.show()
-            widget.raise_()
-            return
+        if widget.objectName() in ("SceneSwitcherDock", "SceneSwitcherDialog"):
+            try:
+                widget.close()
+                widget.deleteLater()
+            except Exception:
+                pass
 
-    dock = SceneSwitcherUI()
+    main_window = None
+    try:
+        import qtmax
+        main_window = qtmax.GetQMaxMainWindow()
+    except Exception:
+        pass
+    if main_window is None and rt:
+        try:
+            main_window = QtWidgets.QWidget.find(rt.windows.getMAXHWND())
+        except Exception:
+            pass
+
+    dock = SceneSwitcherUI(parent=main_window)
+    if main_window and hasattr(main_window, "addDockWidget"):
+        try:
+            main_window.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+        except Exception:
+            pass
+
     dock.setFloating(True)
     dock.show()
+    _CURRENT_SCENE_SWITCHER_INSTANCE = dock
 
     return dock
 

@@ -119,18 +119,25 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
         # Base right edge for calculations
         base_right = rect.right() - self.right_margin
 
-        # 2. Check if marked ORANGE (UserRole + 2) - Rightmost
+        # Pre-calculate dot center positions
+        center_x_orange = base_right - (self.strip_width / 2)
+        center_x_cyan = base_right - self.strip_width - self.dot_spacing - (self.strip_width / 2)
+
+        # 2. Draw gray placeholder circles (always visible as click-area hints)
+        placeholder_color = QtGui.QColor("#494949")
+        painter.setBrush(QtGui.QBrush(placeholder_color))
+        painter.drawEllipse(QtCore.QPointF(center_x_orange, center_y), radius, radius)
+        painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
+
+        # 3. Draw ORANGE marker on top if active (UserRole + 2) - Rightmost
         is_marked_orange = index.data(QtCore.Qt.UserRole + 2)
         if is_marked_orange:
-            center_x_orange = base_right - (self.strip_width / 2)
             painter.setBrush(QtGui.QBrush(QtGui.QColor("#ff736a")))
             painter.drawEllipse(QtCore.QPointF(center_x_orange, center_y), radius, radius)
 
-        # 3. Check if marked CYAN (UserRole + 3) - Left of Orange (with spacing)
+        # 4. Draw GREEN marker on top if active (UserRole + 3) - Left of Orange
         is_marked_cyan = index.data(QtCore.Qt.UserRole + 3)
         if is_marked_cyan:
-            # 2nd strip from right + spacing
-            center_x_cyan = base_right - self.strip_width - self.dot_spacing - (self.strip_width / 2)
             painter.setBrush(QtGui.QBrush(QtGui.QColor("#4fdc45")))
             painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
 

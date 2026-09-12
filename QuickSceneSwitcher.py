@@ -21,7 +21,10 @@
 import sys
 import os
 import uuid
-from PySide2 import QtWidgets, QtGui, QtCore, QtSvg
+try:
+    from PySide2 import QtWidgets, QtGui, QtCore, QtSvg
+except ImportError:
+    from PySide6 import QtWidgets, QtGui, QtCore, QtSvg
 
 import pymxs
 rt = pymxs.runtime

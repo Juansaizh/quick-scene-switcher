@@ -344,6 +344,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.setWindowTitle("Quick Scene Switcher")
         self.resize(350, 500)
         self.current_scene_path = ""
+        self._current_sort_state = "default"
 
         self.setObjectName("SceneSwitcherDock")
         self.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
@@ -596,8 +597,8 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         * Filter tokens use fnmatch wildcards (``*``, ``?``, ``[]``).
           Plain text without wildcards is auto-wrapped as ``*text*``.
         * Sort commands (``o:<cmd>`` / ``sort:<cmd>``):
-          - ``asc``  – alphabetical A-Z  (default)
-          - ``desc`` – alphabetical Z-A
+          - ``asc``  – natural sort A-Z  (default)
+          - ``desc`` – natural sort Z-A
           - ``num`` / ``natural`` – natural numeric order
           - *<pattern>* – strip the matching prefix/portion and sort
             by the remainder (e.g. ``o:t?_`` strips ``t2_`` to sort by ``603``).
@@ -612,78 +613,52 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         else:
             pattern = None  # show everything
 
-        # --- 2. Collect visible items with their display names ---
-        visible_items = []
+        # --- 2. Handle sorting (re-order rows only when sort state changes) ---
+        target_sort = sort_command.lower() if sort_command else "default"
+        current_sort = getattr(self, "_current_sort_state", "default")
+
+        if target_sort != current_sort:
+            self._current_sort_state = target_sort
+
+            if target_sort in ("default", "asc", "num", "natural"):
+                key_fn = lambda name: natural_sort_key(name)
+                reverse = False
+            elif target_sort == "desc":
+                key_fn = lambda name: natural_sort_key(name)
+                reverse = True
+            else:
+                strip_pattern = target_sort
+                def _pattern_key(name):
+                    name_lower = name.lower()
+                    for end in range(1, len(name_lower) + 1):
+                        if fnmatch.fnmatch(name_lower[:end], strip_pattern):
+                            remainder = name_lower[end:]
+                            return natural_sort_key(remainder) if remainder else natural_sort_key(name_lower)
+                    return natural_sort_key(name_lower)
+                key_fn = _pattern_key
+                reverse = False
+
+            all_items = [self.scene_list.item(i) for i in range(self.scene_list.count())]
+            sorted_items = sorted(
+                all_items,
+                key=lambda it: key_fn(it.data(QtCore.Qt.UserRole + 1) or it.text()),
+                reverse=reverse
+            )
+
+            if sorted_items != all_items:
+                self.scene_list.blockSignals(True)
+                taken = [self.scene_list.takeItem(0) for _ in range(self.scene_list.count())]
+                item_map = {id(it): it for it in taken}
+                for target_item in sorted_items:
+                    self.scene_list.addItem(item_map[id(target_item)])
+                self.scene_list.blockSignals(False)
+
+        # --- 3. Apply visibility filter (ALWAYS executed last so addItem cannot reset it) ---
         for i in range(self.scene_list.count()):
             item = self.scene_list.item(i)
             display_name = (item.data(QtCore.Qt.UserRole + 1) or item.text())
-            if pattern is None or fnmatch.fnmatch(display_name.lower(), pattern):
-                item.setHidden(False)
-                visible_items.append((item, display_name))
-            else:
-                item.setHidden(True)
-
-        # --- 3. Determine sort key function ---
-        sort_cmd_lower = sort_command.lower()
-
-        if not sort_cmd_lower or sort_cmd_lower == "asc":
-            key_fn = lambda name: name.lower()
-            reverse = False
-        elif sort_cmd_lower == "desc":
-            key_fn = lambda name: name.lower()
-            reverse = True
-        elif sort_cmd_lower in ("num", "natural"):
-            key_fn = lambda name: natural_sort_key(name)
-            reverse = False
-        else:
-            # Pattern-based key extraction:
-            # Strip the portion that matches sort_command pattern and sort by
-            # the remainder.  E.g. o:t?_ on "t2_603" → key = "603".
-            strip_pattern = sort_command.lower()
-            def _pattern_key(name):
-                name_lower = name.lower()
-                # Use fnmatch to find the matching prefix length
-                # Try increasing prefix lengths until the pattern matches
-                for end in range(1, len(name_lower) + 1):
-                    if fnmatch.fnmatch(name_lower[:end], strip_pattern):
-                        remainder = name_lower[end:]
-                        return natural_sort_key(remainder) if remainder else natural_sort_key(name_lower)
-                # Pattern did not match any prefix → use full name
-                return natural_sort_key(name_lower)
-            key_fn = _pattern_key
-            reverse = False
-
-        # --- 4. Re-order list widget rows ---
-        if visible_items:
-            # We need to reorder ALL items (visible + hidden) so that visible
-            # items appear in sorted order while hidden items keep their
-            # relative position at the end.
-            sorted_visible = sorted(visible_items, key=lambda pair: key_fn(pair[1]), reverse=reverse)
-
-            # Detach all items, reinsert in new order
-            self.scene_list.blockSignals(True)
-            all_items_data = []
-            for i in range(self.scene_list.count()):
-                item = self.scene_list.item(i)
-                all_items_data.append(item)
-
-            hidden_items = [item for item in all_items_data if item.isHidden()]
-            ordered_items = [pair[0] for pair in sorted_visible] + hidden_items
-
-            # Only reorder if the order actually changed
-            current_order = [self.scene_list.item(i) for i in range(self.scene_list.count())]
-            if ordered_items != current_order:
-                # Takeout all rows and reinsert
-                count = self.scene_list.count()
-                taken = []
-                for _ in range(count):
-                    taken.append(self.scene_list.takeItem(0))
-
-                item_map = {id(it): it for it in taken}
-                for target_item in ordered_items:
-                    self.scene_list.addItem(item_map[id(target_item)])
-
-            self.scene_list.blockSignals(False)
+            matches = (pattern is None or fnmatch.fnmatch(display_name.lower(), pattern))
+            item.setHidden(not matches)
 
         # Refresh master checkbox state after filtering
         self.update_master_checkboxes_state()
@@ -1136,6 +1111,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             self._perform_scene_switch(first_item)
 
         # Re-apply search filter if text is present
+        self._current_sort_state = "default"
         self.search_le.clear()
 
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))

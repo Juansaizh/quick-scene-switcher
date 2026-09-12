@@ -73,9 +73,8 @@ def create_svg_icon(svg_string, width=24, height=24, color_hex="#ffffff"):
     if not svg_string:
         return QtGui.QIcon()
         
-    # Simple tinting: replace a placeholder or standard black with desired color
-    # This is a basic example; for complex SVGs use a proper XML parser or Qt's coloring
     svg_data = svg_string.replace('fill="currentColor"', f'fill="{color_hex}"')
+    svg_data = svg_data.replace('stroke="currentColor"', f'stroke="{color_hex}"')
     
     # Render SVG to QPixmap
     renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(svg_data.encode('utf-8')))
@@ -442,49 +441,29 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         action_layout = QtWidgets.QHBoxLayout()
 
-        # SVG Definitions
+        # SVG Definitions (Bootstrap Icons Solid)
         svg_save = """
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16.17L21 7.83V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 21V13H7V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M7 3V8H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 1.5A1.5 1.5 0 0 1 1.5 0H3v5.5A1.5 1.5 0 0 0 4.5 7h7A1.5 1.5 0 0 0 13 5.5V0h.086a1.5 1.5 0 0 1 1.06.44l1.415 1.414A1.5 1.5 0 0 1 16 2.914V14.5a1.5 1.5 0 0 1-1.5 1.5H14v-5.5A1.5 1.5 0 0 0 12.5 9h-9A1.5 1.5 0 0 0 2 10.5V16h-.5A1.5 1.5 0 0 1 0 14.5z"/>
+        <path d="M3 16h10v-5.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5zm9-16H4v5.5a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5zM9 1h2v4H9z"/>
         </svg>
         """
 
         svg_copy = """
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 9H11C10.4696 9 9.96086 9.21071 9.58579 9.58579C9.21071 9.96086 9 10.4696 9 11V20C9 20.5304 9.21071 21.0391 9.58579 21.4142C9.96086 21.7893 10.4696 22 11 22H20C20.5304 22 21.0391 21.7893 21.4142 21.4142C21.7893 21.0391 22 20.5304 22 20V11C22 10.4696 21.7893 9.96086 21.4142 9.58579C21.0391 9.21071 20.5304 9 20 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M5 15H4C3.46957 15 2.96086 14.7893 2.58579 14.4142C2.21071 14.0391 2 13.5304 2 13V4C2 3.46957 2.21071 2.96086 2.58579 2.58579C2.96086 2.21071 3.46957 2 4 2H13C13.5304 2 14.0391 2.21071 14.4142 2.58579C14.7893 2.96086 15 3.46957 15 4V5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1z"/>
         </svg>
         """
 
         svg_paste = """
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M16 4H8V6H16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6H5C3.89543 6 3 6.89543 3 8V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V8C21 6.89543 20.1046 6 19 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" d="M10 1.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5zm-5 0A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5v1A1.5 1.5 0 0 1 9.5 4h-3A1.5 1.5 0 0 1 5 2.5zm-2 0h1v1A2.5 2.5 0 0 0 6.5 5h3A2.5 2.5 0 0 0 12 2.5v-1h1a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3.5a2 2 0 0 1 2-2"/>
         </svg>
         """
 
-        # Using stroke="currentColor" so we just need to replace that string for color if desired, 
-        # but create_svg_icon replaces 'fill="currentColor"'.
-        # Let's adjust create_svg_icon to handle stroke or just act on the whole string replacement.
-        # Actually create_svg_icon as written only does: .replace('fill="currentColor"', ...)
-        # So I will pre-tint these strings or pass stroke="color" in the svg itself? 
-        # Easier: Modify create_svg_icon to also replace stroke="currentColor", OR just hardcode the color white for now in the SVG string if current helper is too simple.
-        # But for best practice with the helper I made:
-        # I'll update the SVGs to use specific color (white) or update the helper. 
-        # Let's assume the user wants the standard white icon first. 
-        # The helper I wrote in previous step: svg_string.replace('fill="currentColor"', f'fill="{color_hex}"')
-        # These SVGs use STROKE.
-        # Quick Fix: I will just use `stroke="#ffffff"` directly in the SVG definitions below to ensure they show up white.
-        
-        svg_save = svg_save.replace('stroke="currentColor"', 'stroke="#ffffff"')
-        svg_copy = svg_copy.replace('stroke="currentColor"', 'stroke="#ffffff"')
-        svg_paste = svg_paste.replace('stroke="currentColor"', 'stroke="#ffffff"')
-
-        icon_save = create_svg_icon(svg_save, 24, 24)
-        icon_copy = create_svg_icon(svg_copy, 24, 24)
-        icon_paste = create_svg_icon(svg_paste, 24, 24)
+        icon_save = create_svg_icon(svg_save, 24, 24, "#ffffff")
+        icon_copy = create_svg_icon(svg_copy, 24, 24, "#ffffff")
+        icon_paste = create_svg_icon(svg_paste, 24, 24, "#ffffff")
 
         self.save_btn = QtWidgets.QPushButton(" Save")
         self.save_btn.setIcon(icon_save)

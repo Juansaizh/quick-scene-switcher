@@ -959,12 +959,12 @@ class ReorderableTableWidget(QTableWidget):
             painter.setFont(QFont("Segoe UI", 11, QFont.Bold))
             painter.setPen(QColor("#b5b5b5"))
             rect_title = QRect(0, self.viewport().height() // 2 - 24, self.viewport().width(), 24)
-            painter.drawText(rect_title, Qt.AlignCenter, "No Multi/Sub-Object Material Selected")
+            #painter.drawText(rect_title, Qt.AlignCenter, "No Multi/Sub-Object Material Selected")
 
             painter.setFont(QFont("Segoe UI", 9))
             painter.setPen(QColor("#787878"))
             rect_sub = QRect(0, self.viewport().height() // 2 + 4, self.viewport().width(), 20)
-            painter.drawText(rect_sub, Qt.AlignCenter, "Select an object in viewport or a material node in SME")
+            #painter.drawText(rect_sub, Qt.AlignCenter, "Select an object in viewport or a material node in SME")
 
             painter.end()
 
@@ -1386,7 +1386,7 @@ class MultiMaterialEditorUI(QDialog):
 
         config_settings = load_config_settings()
 
-        self.chk_auto_renumber = QCheckBox("Auto-Renumber IDs", self)
+        self.chk_auto_renumber = QCheckBox("Renumber IDs", self)
         self.chk_auto_renumber.setChecked(config_settings.get('auto_renumber_ids', True))
         self.chk_auto_renumber.toggled.connect(self.on_auto_renumber_toggled)
         options_layout.addWidget(self.chk_auto_renumber)

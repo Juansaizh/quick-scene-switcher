@@ -122,20 +122,32 @@ class SceneDelegate(QtWidgets.QStyledItemDelegate):
         center_x_orange = base_right - (self.strip_width / 2)
         center_x_cyan = base_right - self.strip_width - self.dot_spacing - (self.strip_width / 2)
 
-        # 2. Draw gray placeholder circles (always visible as click-area hints)
-        placeholder_color = QtGui.QColor("#494949")
-        painter.setBrush(QtGui.QBrush(placeholder_color))
-        painter.drawEllipse(QtCore.QPointF(center_x_orange, center_y), radius, radius)
-        painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
+        # Check active states
+        is_marked_orange = index.data(QtCore.Qt.UserRole + 2)
+        is_marked_cyan = index.data(QtCore.Qt.UserRole + 3)
+
+        # Check hover state: check DropListWidget tracked row or style option
+        list_widget = getattr(option, "widget", None) or self.parent()
+        if hasattr(list_widget, '_hovered_row'):
+            is_hovered = (list_widget._hovered_row == index.row())
+        else:
+            is_hovered = bool(option.state & QtWidgets.QStyle.State_MouseOver)
+
+        # 2. Draw gray placeholder circles ONLY when hovering over the row (hints for click targets)
+        if is_hovered:
+            placeholder_color = QtGui.QColor("#494949")
+            painter.setBrush(QtGui.QBrush(placeholder_color))
+            if not is_marked_orange:
+                painter.drawEllipse(QtCore.QPointF(center_x_orange, center_y), radius, radius)
+            if not is_marked_cyan:
+                painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
 
         # 3. Draw ORANGE marker on top if active (UserRole + 2) - Rightmost
-        is_marked_orange = index.data(QtCore.Qt.UserRole + 2)
         if is_marked_orange:
             painter.setBrush(QtGui.QBrush(QtGui.QColor("#ff736a")))
             painter.drawEllipse(QtCore.QPointF(center_x_orange, center_y), radius, radius)
 
         # 4. Draw GREEN marker on top if active (UserRole + 3) - Left of Orange
-        is_marked_cyan = index.data(QtCore.Qt.UserRole + 3)
         if is_marked_cyan:
             painter.setBrush(QtGui.QBrush(QtGui.QColor("#4fdc45")))
             painter.drawEllipse(QtCore.QPointF(center_x_cyan, center_y), radius, radius)
@@ -189,6 +201,10 @@ class DropListWidget(QtWidgets.QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self.setMouseTracking(True)
+        self.viewport().setAttribute(QtCore.Qt.WA_Hover, True)
+        self.viewport().installEventFilter(self)
+        self._hovered_row = -1
 
         # --- Overlay label for drag feedback ---
         self._drop_overlay = QtWidgets.QLabel("Drop .max files here", self)
@@ -205,6 +221,44 @@ class DropListWidget(QtWidgets.QListWidget):
             }
         """)
         self._drop_overlay.hide()
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+        item = self.itemAt(pos)
+        new_row = self.row(item) if item else -1
+        if new_row != self._hovered_row:
+            old_row = self._hovered_row
+            self._hovered_row = new_row
+            if old_row != -1:
+                old_item = self.item(old_row)
+                if old_item:
+                    self.viewport().update(self.visualItemRect(old_item))
+            if new_row != -1:
+                new_item = self.item(new_row)
+                if new_item:
+                    self.viewport().update(self.visualItemRect(new_item))
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._clear_hover()
+
+    def eventFilter(self, watched, event):
+        if watched == self.viewport() and event.type() == QtCore.QEvent.Leave:
+            self._clear_hover()
+        return super().eventFilter(watched, event)
+
+    def _clear_hover(self):
+        if self._hovered_row != -1:
+            old_row = self._hovered_row
+            self._hovered_row = -1
+            old_item = self.item(old_row)
+            if old_item:
+                self.viewport().update(self.visualItemRect(old_item))
+
+    def clear(self):
+        self._hovered_row = -1
+        super().clear()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

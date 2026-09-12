@@ -21,6 +21,7 @@
 import sys
 import os
 import fnmatch
+import re
 import uuid
 try:
     from PySide2 import QtWidgets, QtGui, QtCore, QtSvg
@@ -86,6 +87,15 @@ def create_svg_icon(svg_string, width=24, height=24, color_hex="#ffffff"):
     painter.end()
     
     return QtGui.QIcon(pixmap)
+
+def natural_sort_key(s):
+    """
+    Generates a sort key that handles embedded numbers naturally.
+    e.g. 'scene_2' < 'scene_10' instead of lexicographic 'scene_10' < 'scene_2'.
+    """
+    return [int(part) if part.isdigit() else part.lower()
+            for part in re.split(r'(\d+)', s)]
+
 
 class SceneDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, parent=None):
@@ -350,9 +360,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         # --- Search Bar ---
         self.search_le = QtWidgets.QLineEdit()
-        self.search_le.setPlaceholderText("Search scenes (*, ?)...")
+        self.search_le.setPlaceholderText("Filter & sort  (e.g. t2_*  o:num  sort:desc)")
         self.search_le.setClearButtonEnabled(True)
-        self.search_le.textChanged.connect(self.filter_scenes)
+        self.search_le.textChanged.connect(self.filter_and_sort_scenes)
         main_layout.addWidget(self.search_le)
 
         # Header Layout (Folder Name + Master Checkboxes)
@@ -509,26 +519,131 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
 
-    def filter_scenes(self):
-        """Filters the scene list in real-time based on the search bar text.
-        Supports wildcards (*, ?, []). Plain text is wrapped as *text* for substring matching.
-        Matching is case-insensitive."""
+    # ------------------------------------------------------------------
+    #  Search-bar query parser & advanced filter / sort
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def parse_search_query(raw_text):
+        """Splits the search-bar text into a filter pattern and a sort command.
+
+        Recognised sort prefixes (case-insensitive): ``o:`` and ``sort:``.
+
+        Returns
+        -------
+        (filter_pattern, sort_command)
+            *filter_pattern*: string for fnmatch filtering (may be empty).
+            *sort_command*: the value after ``o:`` / ``sort:`` (may be empty).
+        """
+        filter_parts = []
+        sort_command = ""
+
+        tokens = raw_text.strip().split()
+        for token in tokens:
+            lower = token.lower()
+            if lower.startswith("o:") or lower.startswith("sort:"):
+                # Extract the value after the prefix
+                sort_command = token.split(":", 1)[1]
+            else:
+                filter_parts.append(token)
+
+        filter_pattern = " ".join(filter_parts)
+        return filter_pattern, sort_command
+
+    def filter_and_sort_scenes(self):
+        """Filters **and** sorts the scene list in real-time.
+
+        * Filter tokens use fnmatch wildcards (``*``, ``?``, ``[]``).
+          Plain text without wildcards is auto-wrapped as ``*text*``.
+        * Sort commands (``o:<cmd>`` / ``sort:<cmd>``):
+          - ``asc``  – alphabetical A-Z  (default)
+          - ``desc`` – alphabetical Z-A
+          - ``num`` / ``natural`` – natural numeric order
+          - *<pattern>* – strip the matching prefix/portion and sort
+            by the remainder (e.g. ``o:t?_`` strips ``t2_`` to sort by ``603``).
+        """
         raw_text = self.search_le.text().strip()
+        filter_pattern, sort_command = self.parse_search_query(raw_text)
 
-        if not raw_text:
-            # Show all items when search is empty
-            for i in range(self.scene_list.count()):
-                self.scene_list.item(i).setHidden(False)
+        # --- 1. Build fnmatch pattern ---
+        if filter_pattern:
+            has_wildcards = any(ch in filter_pattern for ch in ('*', '?', '[', ']'))
+            pattern = filter_pattern.lower() if has_wildcards else f"*{filter_pattern.lower()}*"
         else:
-            # Determine if the user typed explicit wildcards
-            has_wildcards = any(ch in raw_text for ch in ('*', '?', '[', ']'))
-            pattern = raw_text.lower() if has_wildcards else f"*{raw_text.lower()}*"
+            pattern = None  # show everything
 
+        # --- 2. Collect visible items with their display names ---
+        visible_items = []
+        for i in range(self.scene_list.count()):
+            item = self.scene_list.item(i)
+            display_name = (item.data(QtCore.Qt.UserRole + 1) or item.text())
+            if pattern is None or fnmatch.fnmatch(display_name.lower(), pattern):
+                item.setHidden(False)
+                visible_items.append((item, display_name))
+            else:
+                item.setHidden(True)
+
+        # --- 3. Determine sort key function ---
+        sort_cmd_lower = sort_command.lower()
+
+        if not sort_cmd_lower or sort_cmd_lower == "asc":
+            key_fn = lambda name: name.lower()
+            reverse = False
+        elif sort_cmd_lower == "desc":
+            key_fn = lambda name: name.lower()
+            reverse = True
+        elif sort_cmd_lower in ("num", "natural"):
+            key_fn = lambda name: natural_sort_key(name)
+            reverse = False
+        else:
+            # Pattern-based key extraction:
+            # Strip the portion that matches sort_command pattern and sort by
+            # the remainder.  E.g. o:t?_ on "t2_603" → key = "603".
+            strip_pattern = sort_command.lower()
+            def _pattern_key(name):
+                name_lower = name.lower()
+                # Use fnmatch to find the matching prefix length
+                # Try increasing prefix lengths until the pattern matches
+                for end in range(1, len(name_lower) + 1):
+                    if fnmatch.fnmatch(name_lower[:end], strip_pattern):
+                        remainder = name_lower[end:]
+                        return natural_sort_key(remainder) if remainder else natural_sort_key(name_lower)
+                # Pattern did not match any prefix → use full name
+                return natural_sort_key(name_lower)
+            key_fn = _pattern_key
+            reverse = False
+
+        # --- 4. Re-order list widget rows ---
+        if visible_items:
+            # We need to reorder ALL items (visible + hidden) so that visible
+            # items appear in sorted order while hidden items keep their
+            # relative position at the end.
+            sorted_visible = sorted(visible_items, key=lambda pair: key_fn(pair[1]), reverse=reverse)
+
+            # Detach all items, reinsert in new order
+            self.scene_list.blockSignals(True)
+            all_items_data = []
             for i in range(self.scene_list.count()):
                 item = self.scene_list.item(i)
-                display_name = (item.data(QtCore.Qt.UserRole + 1) or item.text()).lower()
-                matches = fnmatch.fnmatch(display_name, pattern)
-                item.setHidden(not matches)
+                all_items_data.append(item)
+
+            hidden_items = [item for item in all_items_data if item.isHidden()]
+            ordered_items = [pair[0] for pair in sorted_visible] + hidden_items
+
+            # Only reorder if the order actually changed
+            current_order = [self.scene_list.item(i) for i in range(self.scene_list.count())]
+            if ordered_items != current_order:
+                # Takeout all rows and reinsert
+                count = self.scene_list.count()
+                taken = []
+                for _ in range(count):
+                    taken.append(self.scene_list.takeItem(0))
+
+                item_map = {id(it): it for it in taken}
+                for target_item in ordered_items:
+                    self.scene_list.addItem(item_map[id(target_item)])
+
+            self.scene_list.blockSignals(False)
 
         # Refresh master checkbox state after filtering
         self.update_master_checkboxes_state()
@@ -935,12 +1050,12 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         max_files = []
         try:
             if file_list:
-                max_files = file_list
+                max_files = sorted(file_list, key=lambda p: natural_sort_key(os.path.basename(p)))
             else:
                 for f in os.listdir(folder_path):
                     if f.lower().endswith(".max"):
                         max_files.append(os.path.join(folder_path, f))
-                max_files.sort()
+                max_files.sort(key=lambda p: natural_sort_key(os.path.basename(p)))
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Could not scan files:\n{e}")

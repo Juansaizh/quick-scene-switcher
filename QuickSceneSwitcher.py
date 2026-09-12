@@ -20,6 +20,7 @@
 
 import sys
 import os
+import fnmatch
 import uuid
 try:
     from PySide2 import QtWidgets, QtGui, QtCore, QtSvg
@@ -347,6 +348,13 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         path_container_layout.addLayout(path_input_layout)
         main_layout.addLayout(path_container_layout)
 
+        # --- Search Bar ---
+        self.search_le = QtWidgets.QLineEdit()
+        self.search_le.setPlaceholderText("Search scenes (*, ?)...")
+        self.search_le.setClearButtonEnabled(True)
+        self.search_le.textChanged.connect(self.filter_scenes)
+        main_layout.addWidget(self.search_le)
+
         # Header Layout (Folder Name + Master Checkboxes)
         header_layout = QtWidgets.QHBoxLayout()
         header_layout.setSpacing(10) # Spacing between elements (Label, Checkboxes)
@@ -501,8 +509,32 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         if not self.dirty_timer.isActive():
             self.dirty_timer.start(500)
 
+    def filter_scenes(self):
+        """Filters the scene list in real-time based on the search bar text.
+        Supports wildcards (*, ?, []). Plain text is wrapped as *text* for substring matching.
+        Matching is case-insensitive."""
+        raw_text = self.search_le.text().strip()
+
+        if not raw_text:
+            # Show all items when search is empty
+            for i in range(self.scene_list.count()):
+                self.scene_list.item(i).setHidden(False)
+        else:
+            # Determine if the user typed explicit wildcards
+            has_wildcards = any(ch in raw_text for ch in ('*', '?', '[', ']'))
+            pattern = raw_text.lower() if has_wildcards else f"*{raw_text.lower()}*"
+
+            for i in range(self.scene_list.count()):
+                item = self.scene_list.item(i)
+                display_name = (item.data(QtCore.Qt.UserRole + 1) or item.text()).lower()
+                matches = fnmatch.fnmatch(display_name, pattern)
+                item.setHidden(not matches)
+
+        # Refresh master checkbox state after filtering
+        self.update_master_checkboxes_state()
+
     def toggle_all_orange_markers(self):
-        """Toggles the marked state for all items based on master checkbox (ORANGE)."""
+        """Toggles the marked state for visible items based on master checkbox (ORANGE)."""
         state = self.master_orange_checkbox.isChecked()
         
         # Block signals to prevent massive dataChanged spam
@@ -510,7 +542,8 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         try:
             for i in range(self.scene_list.count()):
                 item = self.scene_list.item(i)
-                item.setData(QtCore.Qt.UserRole + 2, state)
+                if not item.isHidden():
+                    item.setData(QtCore.Qt.UserRole + 2, state)
         finally:
             self.scene_list.model().blockSignals(False)
         
@@ -518,7 +551,7 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         self.update_orange_global_variable() # Update global immediately
 
     def toggle_all_cyan_markers(self):
-        """Toggles the marked state for all items based on master checkbox (CYAN)."""
+        """Toggles the marked state for visible items based on master checkbox (CYAN)."""
         state = self.master_cyan_checkbox.isChecked()
         
         # Block signals to prevent massive dataChanged spam
@@ -526,7 +559,8 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         try:
             for i in range(self.scene_list.count()):
                 item = self.scene_list.item(i)
-                item.setData(QtCore.Qt.UserRole + 3, state)
+                if not item.isHidden():
+                    item.setData(QtCore.Qt.UserRole + 3, state)
         finally:
             self.scene_list.model().blockSignals(False)
         
@@ -946,6 +980,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             # Use _perform_scene_switch to skip dirty checks (we just loaded)
             self._perform_scene_switch(first_item)
 
+        # Re-apply search filter if text is present
+        self.search_le.clear()
+
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=False))
 
     def generate_unique_suffix(self):
@@ -1174,9 +1211,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
     def update_master_checkboxes_state(self):
         """
-        Synchronizes the master checkboxes with the state of individual items.
-        If all items are checked -> Master Checked.
-        If any item is unchecked -> Master Unchecked.
+        Synchronizes the master checkboxes with the state of visible items.
+        If all visible items are checked -> Master Checked.
+        If any visible item is unchecked -> Master Unchecked.
         """
         count = self.scene_list.count()
         if count == 0:
@@ -1186,9 +1223,13 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         all_orange = True
         all_cyan = True
+        visible_count = 0
 
         for i in range(count):
             item = self.scene_list.item(i)
+            if item.isHidden():
+                continue
+            visible_count += 1
             # Check Orange (UserRole + 2)
             if not item.data(QtCore.Qt.UserRole + 2):
                 all_orange = False
@@ -1199,6 +1240,10 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
             if not all_orange and not all_cyan:
                 break
+
+        if visible_count == 0:
+            all_orange = False
+            all_cyan = False
 
         # Update Master Safe (we connect to clicked, so setChecked doesn't trigger loop)
         self.master_cyan_checkbox.setChecked(all_cyan)

@@ -2,3 +2,4 @@ CONTEXT*.md
 __pycache__/
 *.pyc
 *.pyo
+showcase/

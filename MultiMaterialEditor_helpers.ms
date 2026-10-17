@@ -18,6 +18,8 @@ global _jsh_MME_OpenInSME
 global _jsh_MME_SetSlotName
 global _jsh_MME_SetSlotID
 global _jsh_MME_SetSlotEnabled
+global _jsh_MME_SelectFacesByID
+global _jsh_MME_SelectNodesByFaceID
 
 fn _jsh_MME_CloneMaterial mat = (
     if mat == undefined or not isValidObj mat do return undefined
@@ -640,58 +642,116 @@ fn _jsh_MME_UpdateFaceIDs obj oldIDs newIDs = (
     count
 )
 
+-- True when the node's final (evaluated) state is a poly; false means it evaluates to a TriMesh.
+fn _jsh_MME_IsPolyResult obj = (
+    local c = classOf obj
+    c == Editable_Poly or c == PolyMeshObject
+)
+
+-- Faces with matID on the node's final state, so modifiers that change topology or IDs are taken into account.
+fn _jsh_MME_GetFinalFacesByID obj matID isPoly = (
+    if isPoly then polyop.getFacesByMatID obj matID else meshop.getFacesByMatID obj.mesh matID
+)
+
 fn _jsh_MME_GetFaceIDCounts obj = (
     local result = #()
     if obj == undefined or not isValidNode obj do return result
-    
-    local target = if (isProperty obj #baseObject and isValidObj obj.baseObject) then obj.baseObject else obj
-    
-    if isKindOf target Editable_Poly or isKindOf obj Editable_Poly then (
-        local polyObj = if isKindOf target Editable_Poly then target else obj
+    try (
+        local isPoly = _jsh_MME_IsPolyResult obj
+        local tm = if isPoly then obj else obj.mesh
         for matID = 1 to 256 do (
-            local ba = polyop.getFacesByMatID polyObj matID
-            if not ba.isEmpty do (
-                append result #(matID, ba.numberSet)
-            )
+            local ba = if isPoly then polyop.getFacesByMatID tm matID else meshop.getFacesByMatID tm matID
+            if not ba.isEmpty do append result #(matID, ba.numberSet)
         )
-    ) else if isKindOf target Editable_Mesh or isKindOf obj Editable_Mesh or isKindOf target TriMeshGeometry or isKindOf obj TriMeshGeometry then (
-        local numF = getNumFaces obj
-        local counts = #()
-        for f = 1 to numF do (
-            local id = getFaceMatID obj f
-            if id != undefined and id > 0 do (
-                while counts.count < id do append counts 0
-                counts[id] += 1
-            )
+    ) catch()
+    result
+)
+
+fn _jsh_MME_CombineSelection curSel newSel mode = (
+    case mode of (
+        "add": curSel + newSel
+        "subtract": curSel - newSel
+        default: newSel
+    )
+)
+
+fn _jsh_MME_IsFaceSelectable target = (
+    isKindOf target Edit_Poly or isKindOf target Poly_Select or isKindOf target Edit_Mesh or \
+    isKindOf target Mesh_Select or isKindOf target Unwrap_UVW
+)
+
+-- Selects the faces with matID on obj using the top of its stack: the top modifier when it can hold a face
+-- selection (Edit Poly, Poly Select, Edit Mesh, Mesh Select, Unwrap UVW), the collapsed Editable Poly/Mesh,
+-- or else a "<Poly|Mesh> Select (MultiMaterial Editor)" modifier added on top.
+-- Returns #(numFaces, levelName); numFaces is -1 when the object can't be handled.
+fn _jsh_MME_SelectFacesByID obj matID mode = (
+    if obj == undefined or not isValidNode obj do return #(-1, "")
+    local result = #(-1, "")
+    try (
+        if not (obj.isSelected and selection.count == 1) do select obj
+        max modify mode
+        local isPoly = _jsh_MME_IsPolyResult obj
+        local top = if obj.modifiers.count > 0 then obj.modifiers[1] else undefined
+        local target = undefined
+
+        if top == undefined then (
+            if isKindOf obj.baseObject Editable_Poly or isKindOf obj.baseObject Editable_Mesh do target = obj.baseObject
+        ) else if top.enabled and top.enabledInViews and _jsh_MME_IsFaceSelectable top do (
+            target = top
         )
-        for matID = 1 to counts.count do (
-            if counts[matID] != undefined and counts[matID] > 0 do (
-                append result #(matID, counts[matID])
-            )
+
+        if target == undefined and (isPoly or canConvertTo obj TriMeshGeometry) do (
+            target = if isPoly then (Poly_Select name:"Poly Select (MultiMaterial Editor)") \
+                     else (Mesh_Select name:"Mesh Select (MultiMaterial Editor)")
+            addModifier obj target
         )
-    ) else (
-        try (
-            local numF = polyop.getNumFaces obj
-            for matID = 1 to 256 do (
-                local ba = polyop.getFacesByMatID obj matID
-                if not ba.isEmpty do (
-                    append result #(matID, ba.numberSet)
-                )
+
+        if target != undefined do (
+            if modPanel.getCurrentObject() != target do modPanel.setCurrentObject target
+            local ba = _jsh_MME_GetFinalFacesByID obj matID isPoly
+
+            if isKindOf target Edit_Poly then (
+                subObjectLevel = 4
+                -- SetSelection only clears reliably; Select is what actually applies a new face selection
+                local newSel = _jsh_MME_CombineSelection (target.GetSelection #Face node:obj) ba mode
+                target.SetSelection #Face #{} node:obj
+                target.Select #Face newSel node:obj
+            ) else if isKindOf target Unwrap_UVW then (
+                subObjectLevel = 3
+                target.selectFacesByNode (_jsh_MME_CombineSelection (target.getSelectedFacesByNode obj) ba mode) obj
+            ) else if isKindOf target Editable_Poly then (
+                subObjectLevel = 4
+                polyop.setFaceSelection obj (_jsh_MME_CombineSelection (polyop.getFaceSelection obj) ba mode)
+            ) else if isKindOf target Editable_Mesh then (
+                subObjectLevel = 3
+                setFaceSelection obj (_jsh_MME_CombineSelection (getFaceSelection obj) ba mode)
+            ) else (
+                -- Poly Select, Edit Mesh, Mesh Select
+                subObjectLevel = if isPoly then 4 else 3
+                setFaceSelection obj target (_jsh_MME_CombineSelection (getFaceSelection obj target) ba mode)
             )
-        ) catch (
-            try (
-                local tempMesh = snapshotAsMesh obj
-                if tempMesh != undefined do (
-                    for matID = 1 to 256 do (
-                        local ba = meshop.getFacesByMatID tempMesh matID
-                        if not ba.isEmpty do (
-                            append result #(matID, ba.numberSet)
-                        )
-                    )
-                    delete tempMesh
-                )
-            ) catch()
+
+            local levelName = if superClassOf target == modifier then target.name else (classOf target) as string
+            result = #(ba.numberSet, levelName)
+            redrawViews()
         )
+    ) catch (
+        result = #(-1, "")
     )
     result
+)
+
+-- Selects the nodes in objs that have at least one face with matID. Returns the number of matching nodes.
+fn _jsh_MME_SelectNodesByFaceID objs matID mode = (
+    local matched = for obj in objs where isValidNode obj and \
+        not (try (_jsh_MME_GetFinalFacesByID obj matID (_jsh_MME_IsPolyResult obj)) catch #{}).isEmpty collect obj
+    if matched.count > 0 do (
+        case mode of (
+            "add": selectMore matched
+            "subtract": deselect matched
+            default: select matched
+        )
+        redrawViews()
+    )
+    matched.count
 )

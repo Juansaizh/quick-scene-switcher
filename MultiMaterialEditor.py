@@ -459,9 +459,13 @@ class UnifiedTableItemDelegate(QStyledItemDelegate):
         elif col == 5:
             used_faces = slot.get('face_count', 0)
             used_text = str(used_faces) if used_faces > 0 else "-"
-            painter.setFont(QFont("Segoe UI", 9))
+            is_hovered = (hasattr(self.table, '_hover_row') and hasattr(self.table, '_hover_col') and
+                          self.table._hover_row == row and self.table._hover_col == 5 and not self.table._is_dragging)
+            font = QFont("Segoe UI", 9)
+            font.setUnderline(is_hovered and used_faces > 0)
+            painter.setFont(font)
             if used_faces > 0:
-                painter.setPen(QPen(QColor(30, 155, 253)))
+                painter.setPen(QPen(QColor(110, 190, 255) if is_hovered else QColor(30, 155, 253)))
             else:
                 painter.setPen(QPen(QColor(130, 130, 130)))
             painter.drawText(rect, Qt.AlignCenter, used_text)
@@ -687,10 +691,12 @@ class ReorderableTableWidget(QTableWidget):
             main_ui = self.window()
             slots_data = getattr(main_ui, 'slots_data', [])
             has_submat = False
+            has_faces = False
             if hover_row < len(slots_data):
                 has_submat = (slots_data[hover_row].get('sub_mat') is not None)
+                has_faces = slots_data[hover_row].get('face_count', 0) > 0
 
-            if hover_col == 1 or (hover_col == 3 and has_submat) or hover_col == 4:
+            if hover_col == 1 or (hover_col == 3 and has_submat) or hover_col == 4 or (hover_col == 5 and has_faces):
                 self.viewport().setCursor(Qt.PointingHandCursor)
             else:
                 self.viewport().setCursor(Qt.ArrowCursor)
@@ -2021,6 +2027,8 @@ class MultiMaterialEditorUI(QDialog):
             self.pick_slot_color(row)
         elif column == 3:
             self.open_submaterial_in_sme(row)
+        elif column == 5:
+            self.select_faces_by_slot(row)
 
     def on_table_cell_double_clicked(self, row, column):
         if self.table._is_dragging:
@@ -2054,6 +2062,62 @@ class MultiMaterialEditorUI(QDialog):
                 self.set_status("● Error opening Slate Material Editor")
         else:
             self.set_status("● Slate Editor: Focused '{}' (Test Mode)".format(slot.get('sub_mat_name', 'Material')))
+
+    def select_faces_by_slot(self, row):
+        """Selects the faces using the slot's Material ID (Ctrl adds, Alt subtracts)."""
+        if row < 0 or row >= len(self.slots_data):
+            return
+
+        slot = self.slots_data[row]
+        mat_id = int(slot.get('id', row + 1))
+        if slot.get('face_count', 0) <= 0:
+            return
+
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers & Qt.ControlModifier:
+            mode = "add"
+        elif modifiers & Qt.AltModifier:
+            mode = "subtract"
+        else:
+            mode = "replace"
+
+        if not rt:
+            self.set_status("● Selected {} faces (ID {}) (Test Mode)".format(slot['face_count'], mat_id))
+            return
+
+        if not hasattr(rt, '_jsh_MME_SelectFacesByID') or rt._jsh_MME_SelectFacesByID is None:
+            init_maxscript_helpers()
+
+        scene_objs = [obj for obj in getattr(self, '_current_scene_objs_using_mat', []) if rt.isValidNode(obj)]
+        try:
+            selected_users = [obj for obj in scene_objs if obj.isSelected]
+        except Exception:
+            selected_users = []
+
+        rt.theHold.Begin()
+        try:
+            if len(selected_users) == 1 and rt.selection.count == 1:
+                obj = selected_users[0]
+                sel_result = rt._jsh_MME_SelectFacesByID(obj, mat_id, mode)
+                num_faces = int(sel_result[0])
+                level_name = str(sel_result[1])
+                if num_faces < 0:
+                    rt.theHold.Cancel()
+                    self.set_status("● Can't select faces on '{}' (not a Poly/Mesh)".format(obj.name))
+                    return
+                rt.theHold.Accept("Select Faces by ID")
+                self.set_status("● Selected {} faces (ID {}) in {}".format(num_faces, mat_id, level_name))
+            else:
+                objs_arr = rt.execute("#()")
+                for obj in scene_objs:
+                    rt.append(objs_arr, obj)
+                num_objs = int(rt._jsh_MME_SelectNodesByFaceID(objs_arr, mat_id, mode))
+                rt.theHold.Accept("Select Objects by ID")
+                self.set_status("● Selected {} object(s) with ID {}".format(num_objs, mat_id))
+        except Exception as e:
+            rt.theHold.Cancel()
+            print("Error selecting faces by ID: {}".format(e))
+            self.set_status("● Error selecting faces (ID {})".format(mat_id))
 
     def open_target_material_in_sme(self):
         if not self.target_material:

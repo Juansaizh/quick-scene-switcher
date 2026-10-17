@@ -22,6 +22,7 @@ import sys
 import os
 import fnmatch
 import re
+import time
 import uuid
 try:
     from PySide2 import QtWidgets, QtGui, QtCore, QtSvg
@@ -596,6 +597,16 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
         action_layout.addWidget(self.paste_btn)
 
         main_layout.addLayout(action_layout)
+
+        self.clean_save_cb = QtWidgets.QCheckBox("Clean save (slow)")
+        self.clean_save_cb.setChecked(False)
+        self.clean_save_cb.setToolTip(
+            "Save each scene without the layers of the other open scenes.\n"
+            "Uses Hold/Fetch: the master scene is held, everything outside the\n"
+            "active scene is deleted, the file is saved and the master scene is fetched back.\n"
+            "Note: this overwrites the current Hold buffer (Edit > Hold)."
+        )
+        main_layout.addWidget(self.clean_save_cb)
 
         self.active_scene_item = None
 
@@ -1755,6 +1766,9 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
             self.dirty_timer.start(500)
             return False
 
+        if self.clean_save_cb.isChecked():
+            return self._action_clean_save(target_file, layer_name, suffix, root_layer, user_selection)
+
         all_layers_cache = []
         for i in range(rt.LayerManager.count):
             all_layers_cache.append(rt.LayerManager.getLayer(i))
@@ -1881,6 +1895,191 @@ class SceneSwitcherUI(QtWidgets.QDockWidget):
 
         QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=True))
         return False
+
+    def _action_clean_save(self, target_file, layer_name, suffix, root_layer, user_selection):
+        """
+        Clean Save (Hold/Fetch):
+        saveNodes writes every layer of the master scene into the file, leaving the
+        layers of the other open scenes empty in each saved .max. Instead:
+        1. Hold the master scene.
+        2. Delete every node and layer outside the active scene hierarchy.
+        3. Flatten the hierarchy (root/'0 (Scene)' nodes -> layer 0, strip suffixes).
+        4. saveMaxFile without changing the current file name.
+        5. Fetch the master scene back.
+        Fetch rebuilds every node, so Python references are invalid afterwards:
+        selection and clipboard are restored by node handle.
+        """
+        layer0_sub_name = f"0{suffix}"
+
+        # Remember selection and clipboard by handle (node refs die on fetch)
+        selection_ids = []
+        for obj in user_selection:
+            try:
+                selection_ids.append((obj.inode.handle, obj.name))
+            except Exception:
+                pass
+        try:
+            rt.execute("""
+                global QSS_ClipboardHandles = undefined
+                if QSS_ClipboardNodes != undefined do
+                    QSS_ClipboardHandles = for o in QSS_ClipboardNodes where isValidNode o collect o.inode.handle
+            """)
+        except Exception:
+            pass
+
+        # Hold, and verify the hold file was really written before destroying anything
+        hold_file = os.path.join(rt.getDir(rt.name("autoback")), "maxhold.mx")
+        hold_start = time.time()
+        try:
+            rt.holdMaxFile()
+            hold_ok = os.path.isfile(hold_file) and os.path.getmtime(hold_file) >= hold_start - 1
+        except Exception:
+            hold_ok = False
+
+        if not hold_ok:
+            QtWidgets.QMessageBox.warning(self, "Clean Save",
+                                          "Could not hold the master scene. The scene was not saved.")
+            self.dirty_timer.start(500)
+            return False
+
+        save_success = False
+        error_msg = None
+
+        rt.disableSceneRedraw()
+        try:
+            with pymxs.undo(False):
+                save_success = self._strip_scene_and_save(target_file, layer_name, suffix,
+                                                          layer0_sub_name, root_layer)
+        except Exception as e:
+            error_msg = str(e)
+        finally:
+            try:
+                rt.fetchMaxFile(quiet=True)
+            except Exception as e:
+                error_msg = ((error_msg + "\n") if error_msg else "") + \
+                    f"Fetch failed: {e}\nUse Edit > Fetch to recover the master scene."
+            rt.enableSceneRedraw()
+
+        # Restore selection and clipboard
+        rt.clearSelection()
+        restored = []
+        for handle, name in selection_ids:
+            node = rt.maxOps.getNodeByHandle(handle)
+            if node is None or node.name != name:
+                node = rt.getNodeByName(name)
+            if node is not None:
+                restored.append(node)
+        if restored:
+            try:
+                rt.select(restored)
+            except Exception:
+                pass
+        try:
+            rt.execute("""
+                if QSS_ClipboardHandles != undefined do (
+                    QSS_ClipboardNodes = for h in QSS_ClipboardHandles collect (maxOps.getNodeByHandle h)
+                    QSS_ClipboardNodes = for o in QSS_ClipboardNodes where isValidNode o collect o
+                )
+                QSS_ClipboardHandles = undefined
+            """)
+        except Exception:
+            pass
+
+        rt.enableRefMsgs()
+        rt.redrawViews()
+
+        if error_msg:
+            QtWidgets.QMessageBox.warning(self, "Clean Save", f"Clean save failed:\n{error_msg}")
+
+        if save_success:
+            try:
+                self.file_timestamps[target_file] = os.path.getmtime(target_file)
+            except:
+                pass
+
+        QtCore.QTimer.singleShot(200, lambda: self.force_clean_and_restart_timer(use_temp_save=True))
+        return save_success
+
+    def _strip_scene_and_save(self, target_file, layer_name, suffix, layer0_sub_name, root_layer):
+        """Destructive part of the Clean Save. Only call between holdMaxFile and fetchMaxFile."""
+        all_layers_cache = [rt.LayerManager.getLayer(i) for i in range(rt.LayerManager.count)]
+
+        def collect_descendants_recursive(parent_lyr):
+            desc_list = []
+            for lyr in all_layers_cache:
+                p = lyr.getParent()
+                if p and p.name == parent_lyr.name:
+                    desc_list.append(lyr)
+                    desc_list.extend(collect_descendants_recursive(lyr))
+            return desc_list
+
+        descendants = collect_descendants_recursive(root_layer)
+        scene_layer_names = {root_layer.name}
+        scene_layer_names.update(l.name for l in descendants)
+
+        # Sublayers that survive in the saved file ('0 (Scene)' merges into layer 0)
+        kept_layers = [l for l in descendants if l.name != layer0_sub_name]
+
+        nodes_to_save = []
+        foreign_nodes = []
+        for obj in rt.objects:
+            if obj.layer.name in scene_layer_names:
+                nodes_to_save.append(obj)
+            else:
+                foreign_nodes.append(obj)
+
+        if not nodes_to_save:
+            return False
+
+        # 1. Delete nodes of the other scenes
+        if foreign_nodes:
+            try:
+                rt.delete(foreign_nodes)
+            except Exception:
+                for obj in foreign_nodes:
+                    try:
+                        if rt.isValidNode(obj):
+                            rt.delete(obj)
+                    except Exception:
+                        pass
+
+        # 2. Root and '0 (Scene)' nodes go back to layer 0
+        global_layer_0 = rt.LayerManager.getLayer(0)
+        global_layer_0.current = True
+        for obj in nodes_to_save:
+            if obj.layer.name in (layer_name, layer0_sub_name):
+                global_layer_0.addNode(obj)
+
+        # 3. Detach direct children from the root so the root layer can be deleted
+        for lyr in kept_layers:
+            p = lyr.getParent()
+            if p and p.name == root_layer.name:
+                lyr.setParent(rt.undefined)
+
+        # 4. Delete every layer not belonging to this scene (children first)
+        keep_names = {"0"}
+        keep_names.update(l.name for l in kept_layers)
+        deleted_any = True
+        while deleted_any:
+            deleted_any = False
+            for i in range(rt.LayerManager.count - 1, 0, -1):
+                lyr = rt.LayerManager.getLayer(i)
+                if lyr.name in keep_names:
+                    continue
+                if rt.LayerManager.deleteLayerByName(lyr.name):
+                    deleted_any = True
+
+        # 5. Strip ' (SceneName)' suffix (no collisions left with other scenes' layers)
+        for lyr in kept_layers:
+            if lyr.name.endswith(suffix):
+                try:
+                    lyr.setName(lyr.name[:-len(suffix)])
+                except Exception:
+                    pass
+
+        rt.clearSelection()
+        rt.saveMaxFile(target_file, useNewFile=False, quiet=True)
+        return True
 
     def action_copy(self):
         """Stores the current selection in a global MaxScript variable (In-Memory)."""
